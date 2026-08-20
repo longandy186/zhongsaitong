@@ -9,3 +9,6 @@ dist/
 scraper/node_modules/
 scraper/state.json
 scraper/.env
+
+# Cloudflare 本地构建缓存
+.wrangler/
