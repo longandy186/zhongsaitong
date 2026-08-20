@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.astro/
+.DS_Store
+*.log
+.env
+
+# 采集器
+scraper/node_modules/
+scraper/state.json
+scraper/.env

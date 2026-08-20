@@ -1,0 +1,114 @@
+---
+const today = new Date();
+const dateLabel = `${today.getMonth() + 1}月${today.getDate()}日`;
+---
+
+<aside class="status-bar" aria-label="天气与汇率">
+  <div class="ss-section ss-wx">
+    <div class="ss-wx-main" id="wx-temp">—°</div>
+    <div class="ss-wx-meta">
+      <span class="ss-wx-cond" id="wx-cond">天气</span>
+      <span class="ss-wx-city" id="wx-city">贝尔格莱德</span>
+    </div>
+    <div class="ss-wx-extra" id="wx-extra">
+      <span class="ss-extra-item">风 <em id="wx-wind">—</em></span>
+      <span class="ss-extra-item">湿 <em id="wx-humid">—</em></span>
+    </div>
+  </div>
+
+  <div class="ss-divider"></div>
+
+  <div class="ss-section ss-fx">
+    <div class="ss-fx-row">
+      <span class="ss-fx-flag">¥</span>
+      <span class="ss-fx-label">RSD</span>
+      <span class="ss-fx-value" id="fx-rsd">—</span>
+    </div>
+    <div class="ss-fx-row">
+      <span class="ss-fx-flag">¥</span>
+      <span class="ss-fx-label">EUR</span>
+      <span class="ss-fx-value" id="fx-eur">—</span>
+    </div>
+  </div>
+</aside>
+
+<script>
+  const WMO = {
+    0: '晴', 1: '基本晴', 2: '多云', 3: '阴',
+    45: '雾', 48: '雾凇',
+    51: '毛毛雨', 53: '毛毛雨', 55: '毛毛雨',
+    61: '小雨', 63: '中雨', 65: '大雨',
+    71: '小雪', 73: '中雪', 75: '大雪',
+    80: '阵雨', 81: '阵雨', 82: '强阵雨',
+    95: '雷雨', 96: '雷雨冰雹', 99: '雷雨冰雹',
+  };
+  async function loadStatus() {
+    // 汇率：open.er-api.com 免费无 Key
+    try {
+      const r = await fetch('https://open.er-api.com/v6/latest/CNY');
+      const d = await r.json();
+      const rsd = d?.rates?.RSD;
+      const eur = d?.rates?.EUR;
+      if (rsd) document.getElementById('fx-rsd').textContent = rsd.toFixed(2);
+      if (eur) document.getElementById('fx-eur').textContent = eur.toFixed(4);
+    } catch {
+      /* 降级 */
+    }
+    // 天气：open-meteo 免费无 Key，贝尔格莱德，含湿度风速
+    try {
+      const url =
+        'https://api.open-meteo.com/v1/forecast' +
+        '?latitude=44.7866&longitude=20.4489' +
+        '&current_weather=true' +
+        '&hourly=relativehumidity_2m,windspeed_10m' +
+        '&timezone=Europe/Belgrade';
+      const r = await fetch(url);
+      const d = await r.json();
+      const c = d?.current_weather;
+      if (c) {
+        document.getElementById('wx-temp').textContent = `${Math.round(c.temperature)}°`;
+        document.getElementById('wx-cond').textContent = WMO[c.weathercode] ?? '天气';
+        document.getElementById('wx-wind').textContent = `${Math.round(c.windspeed)} km/h`;
+        // 湿度：取当前小时
+        const now = new Date();
+        const idx = d.hourly?.time?.findIndex((t) => t === now.toISOString().slice(0, 13) + ':00');
+        const humid = idx != null && idx >= 0 ? d.hourly.relativehumidity_2m[idx] : null;
+        if (humid != null) document.getElementById('wx-humid').textContent = `${Math.round(humid)}%`;
+      }
+    } catch {
+      /* 降级 */
+    }
+  }
+  loadStatus();
+</script>
+
+<style>
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin: 0 0 12px;
+    box-shadow: 0 1px 0 rgba(26,26,46,0.03);
+  }
+  .ss-section { display: flex; align-items: center; gap: 8px; }
+  .ss-wx { flex: 1; min-width: 0; gap: 10px; }
+  .ss-wx-main { font-size: 24px; font-weight: 800; color: var(--ink); letter-spacing: -1px; line-height: 1; }
+  .ss-wx-meta { display: flex; flex-direction: column; gap: 1px; }
+  .ss-wx-cond { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .ss-wx-city { font-size: 11px; color: var(--ash); }
+  .ss-wx-extra { display: flex; flex-direction: column; gap: 1px; margin-left: auto; font-size: 11px; color: var(--ash); }
+  .ss-extra-item em { font-style: normal; color: var(--charcoal); font-weight: 600; }
+  .ss-divider { width: 1px; height: 28px; background: var(--border); }
+  .ss-fx { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+  .ss-fx-row { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+  .ss-fx-flag { font-size: 10px; color: var(--crimson); font-weight: 700; }
+  .ss-fx-label { color: var(--ash); font-weight: 600; }
+  .ss-fx-value { color: var(--ink); font-weight: 700; }
+  @media (max-width: 380px) {
+    .ss-wx-extra { display: none; }
+  }
+</style>

@@ -1,0 +1,16 @@
+{
+  "name": "zhongsaitong",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "中塞通 · 塞尔维亚华人信息平台",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "astro": "^5.0.0"
+  }
+}

@@ -1,0 +1,21 @@
+---
+import { FEED_ADS } from '../data/ads';
+---
+
+{
+  FEED_ADS.map((ad) => (
+    <a
+      href={ad.url}
+      style="display:flex; flex-direction:column; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; position:relative;"
+    >
+      <div style="position:relative; aspect-ratio:4/3; overflow:hidden; background:var(--bg);">
+        <img src={ad.image} alt={ad.title} loading="lazy" style="width:100%; height:100%; object-fit:cover;" />
+        <span style="position:absolute; left:8px; top:8px; background:rgba(0,0,0,0.55); color:#fff; font-size:10px; padding:1px 6px; border-radius:8px;">广告</span>
+      </div>
+      <div style="padding:10px 12px 12px;">
+        <h2 style="font-size:14px; font-weight:600; line-height:1.4; margin-bottom:4px;">{ad.title}</h2>
+        <p style="font-size:12px; color:var(--text-secondary);">{ad.desc}</p>
+      </div>
+    </a>
+  ))
+}

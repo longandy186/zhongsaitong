@@ -1,0 +1,74 @@
+---
+import Base from '../../layouts/Base.astro';
+import Header from '../../components/Header.astro';
+import TabBar from '../../components/TabBar.astro';
+import Card from '../../components/Card.astro';
+import { getCollection } from 'astro:content';
+import { CATEGORY_LABEL, NEWS_KINDS } from '../../data/site';
+
+export function getStaticPaths() {
+  const categories = ['rentals', 'secondhand', 'jobs', 'news', 'guide', 'supply'];
+  return categories.map((key) => ({ params: { category: key } }));
+}
+
+const { category } = Astro.params;
+const all = await getCollection('items');
+const items = all
+  .filter((i) => i.data.status === 'active' && i.data.category === category)
+  .sort(
+    (a, b) =>
+      Number(b.data.featured) - Number(a.data.featured) ||
+      b.data.date.getTime() - a.data.date.getTime()
+  );
+const label = CATEGORY_LABEL[category ?? ''] ?? '';
+const isNews = category === 'news';
+---
+
+<Base title={`${label} · 中塞通`}>
+  <Header />
+  <TabBar active={category ?? ''} />
+  <div class="section-title">{label}</div>
+
+  {isNews && (
+    <div id="news-kinds" style="display:flex; gap:6px; margin-bottom:12px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px;">
+      {
+        NEWS_KINDS.map((k) => (
+          <button
+            class="kind-chip"
+            data-kind={k.key}
+            onclick="filterNews(this)"
+            style={`flex-shrink:0; padding:4px 14px; border-radius:14px; font-size:12px; cursor:pointer; background:${k.key === 'all' ? 'var(--red)' : 'var(--card)'}; color:${k.key === 'all' ? '#fff' : 'var(--text-secondary)'}; border:1px solid ${k.key === 'all' ? 'transparent' : 'var(--border)'};`}
+          >
+            {k.label}
+          </button>
+        ))
+      }
+    </div>
+  )}
+
+  {
+    items.length === 0 ? (
+      <div class="empty">该分类暂无信息，欢迎投稿</div>
+    ) : (
+      <div class="feed" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        {items.map((item) => <Card item={item} />)}
+      </div>
+    )
+  }
+</Base>
+
+<script>
+  function filterNews(btn: HTMLButtonElement) {
+    const kind = btn.getAttribute('data-kind');
+    document.querySelectorAll('.kind-chip').forEach((c) => {
+      const el = c as HTMLButtonElement;
+      const active = el === btn;
+      el.style.background = active ? 'var(--red)' : 'var(--card)';
+      el.style.color = active ? '#fff' : 'var(--text-secondary)';
+    });
+    document.querySelectorAll('.feed a[data-kind]').forEach((card) => {
+      const el = card as HTMLElement;
+      el.style.display = kind === 'all' || el.getAttribute('data-kind') === kind ? '' : 'none';
+    });
+  }
+</script>

@@ -1,0 +1,54 @@
+name: Auto Scrape
+
+# 定时自动采集（每天两次：北京 08:00 / 20:00 = UTC 0 / 12）+ 手动触发
+on:
+  schedule:
+    - cron: '0 0,12 * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install scraper deps
+        run: cd scraper && npm install --no-audit --no-fund
+
+      - name: Run scraper
+        run: cd scraper && node run.js
+        env:
+          # 在仓库 Settings → Secrets and variables → Actions 中配置
+          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
+
+      - name: Commit & push
+        run: |
+          git config user.name "zst-bot"
+          git config user.email "bot@zhongsaitong.local"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "无新内容，跳过提交"
+          else
+            git commit -m "chore: auto-scrape $(date +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Notify pending for review
+        # 抓取后把 pending 草稿推送到审核渠道（飞书/微信/WhatsApp）
+        # 即使本次无新内容，也会把存量 pending 一并推送，方便你随时审核
+        run: cd scraper && node notify.js
+        env:
+          NOTIFY_CHANNEL: ${{ secrets.NOTIFY_CHANNEL }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
+          WECHAT_APPSECRET: ${{ secrets.WECHAT_APPSECRET }}
+          WECHAT_TO_OPENID: ${{ secrets.WECHAT_TO_OPENID }}
+          APPROVE_URL: ${{ secrets.APPROVE_URL }}
+          APPROVE_SECRET: ${{ secrets.APPROVE_SECRET }}

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <rect width="300" height="300" fill="#ffffff"/>
+  <rect x="10" y="10" width="280" height="280" rx="12" fill="none" stroke="#111" stroke-width="3"/>
+  <rect x="30" y="30" width="30" height="30" rx="4" fill="#111"/>
+  <rect x="70" y="30" width="30" height="30" rx="4" fill="#111"/>
+  <rect x="110" y="30" width="30" height="30" rx="4" fill="#111"/>
+  <rect x="30" y="70" width="30" height="30" rx="4" fill="#111"/>
+  <rect x="150" y="110" width="80" height="80" rx="6" fill="#111"/>
+  <text x="190" y="160" text-anchor="middle" fill="#fff" font-size="14" font-weight="600" font-family="sans-serif">QR</text>
+  <rect x="30" y="240" width="30" height="30" rx="4" fill="#111"/>
+  <rect x="70" y="240" width="30" height="30" rx="4" fill="#111"/>
+  <rect x="110" y="240" width="30" height="30" rx="4" fill="#111"/>
+  <rect x="240" y="240" width="30" height="30" rx="4" fill="#111"/>
+</svg>

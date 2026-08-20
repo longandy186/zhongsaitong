@@ -1,0 +1,45 @@
+---
+import { SOCIAL, AD_URL } from '../data/site';
+---
+
+<section class="community-cta">
+  <div class="cta-inner animate-fade-up">
+    <div class="cta-brand">
+      <span class="cta-logo">SRB</span>
+      <div class="cta-brand-text">
+        <span class="cta-name">{SOCIAL.wechatName}</span>
+        <span class="cta-slogan">塞尔维亚华人信息第一站</span>
+      </div>
+    </div>
+
+    <p class="cta-desc">
+      在塞尔维亚有需要帮忙的？进微信群找同路人，租房、二手、拼车、互助，群里都有。
+      你的商家想被更多华人看到？这里有位置。
+    </p>
+
+    <div class="cta-actions">
+      <a href="#wechat-pop" class="cta-btn cta-btn--primary" onclick="document.getElementById('wechat-pop').style.display='flex'">
+        加入微信群
+      </a>
+      <a href={AD_URL} class="cta-btn cta-btn--ghost">广告合作</a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .community-cta { padding: 16px 0 8px; }
+  .cta-inner { background: var(--card); border: 2px solid var(--ink); border-radius: 22px; padding: 24px; position: relative; }
+  .cta-inner::after { content: '华人互助'; position: absolute; top: -1px; right: 22px; background: var(--crimson); color: #fff; font-size: 10px; font-weight: 800; letter-spacing: 1px; padding: 5px 12px; border-radius: 0 0 8px 8px; }
+  .cta-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .cta-logo { width: 44px; height: 44px; background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; border-radius: 12px; letter-spacing: -0.5px; flex-shrink: 0; }
+  .cta-brand-text { display: flex; flex-direction: column; gap: 2px; }
+  .cta-name { font-size: 17px; font-weight: 800; color: var(--ink); letter-spacing: -0.3px; }
+  .cta-slogan { font-size: 12px; color: var(--ash); font-weight: 500; }
+  .cta-desc { font-size: 14px; line-height: 1.7; color: var(--charcoal); margin-bottom: 18px; }
+  .cta-actions { display: flex; gap: 12px; }
+  .cta-btn { padding: 13px 20px; border-radius: 14px; font-size: 14px; font-weight: 700; transition: all 0.2s ease; flex: 1; text-align: center; }
+  .cta-btn:active { transform: scale(0.96); }
+  .cta-btn--primary { background: var(--ink); color: #fff; }
+  .cta-btn--ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--mist); }
+  .cta-btn--ghost:active { background: var(--paper); }
+</style>

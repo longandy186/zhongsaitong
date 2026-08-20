@@ -1,0 +1,25 @@
+---
+import { BANNERS } from '../data/ads';
+---
+
+<div
+  style="display:flex; overflow-x:auto; scroll-snap-type:x mandatory; gap:10px; margin:10px 0; -webkit-overflow-scrolling:touch; scrollbar-width:none; border-radius:var(--radius);"
+>
+  {
+    BANNERS.map((b) => (
+      <a
+        href={b.url}
+        style="scroll-snap-align:start; flex-shrink:0; width:100%; position:relative; border-radius:var(--radius); overflow:hidden; display:block;"
+      >
+        <img src={b.image} alt={b.title} style="width:100%; aspect-ratio:2/1; object-fit:cover; display:block;" />
+        <div style="position:absolute; left:12px; bottom:12px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.4);">
+          <div style="font-size:15px; font-weight:700;">{b.title}</div>
+          <div style="font-size:12px; opacity:0.92;">{b.subtitle}</div>
+        </div>
+      </a>
+    ))
+  }
+  <style>
+    div::-webkit-scrollbar { display: none; }
+  </style>
+</div>

@@ -1,0 +1,53 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import StatusBar from '../components/StatusBar.astro';
+import AdBanner from '../components/AdBanner.astro';
+import FollowBar from '../components/FollowBar.astro';
+import NewsStream from '../components/NewsStream.astro';
+import TabBar from '../components/TabBar.astro';
+import Card from '../components/Card.astro';
+import FeaturedArticle from '../components/FeaturedArticle.astro';
+import CommunityCTA from '../components/CommunityCTA.astro';
+import FeedAd from '../components/FeedAd.astro';
+import { getCollection } from 'astro:content';
+import { FEED_AD_EVERY } from '../data/ads';
+
+const all = await getCollection('items');
+const items = all
+  .filter((i) => i.data.status === 'active')
+  .sort(
+    (a, b) =>
+      Number(b.data.featured) - Number(a.data.featured) ||
+      b.data.date.getTime() - a.data.date.getTime()
+  );
+---
+
+<Base>
+  <Header />
+  <AdBanner />
+  <FollowBar />
+  <StatusBar />
+  <NewsStream />
+  <TabBar active="all" />
+
+  {
+    items.length === 0 ? (
+      <div class="empty">暂无信息，敬请期待</div>
+    ) : (
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+        {
+          items.map((item, idx) => (
+            <Fragment>
+              <Card item={item} />
+              {FEED_AD_EVERY > 0 && idx > 0 && (idx + 1) % FEED_AD_EVERY === 0 && <FeedAd />}
+            </Fragment>
+          ))
+        }
+      </div>
+    )
+  }
+
+  <FeaturedArticle />
+  <CommunityCTA />
+</Base>

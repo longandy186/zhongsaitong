@@ -1,0 +1,78 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import { FORM_ENDPOINT } from '../data/site';
+---
+
+<Base title="发布信息 · 中塞通">
+  <Header />
+
+  <div class="section-title">发布信息</div>
+
+  <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 16px; margin-bottom:16px; font-size:14px; color:var(--text-secondary);">
+    <p style="margin-bottom:8px;">填写下方表单即可发布租房 / 二手 / 招聘 / 资讯信息。</p>
+    <p style="margin-bottom:8px;">信息经人工审核后，将在 <span style="color:var(--red);font-weight:600;">中塞通</span> 网站、公众号同步展示。</p>
+    <p style="font-size:13px; color:var(--text-tertiary);">
+      提示：为保护隐私，联系方式默认不公开在详情页，有意的用户会通过你填写的联系方式与你联系。
+    </p>
+  </div>
+
+  <form
+    action={FORM_ENDPOINT}
+    method="POST"
+    enctype="multipart/form-data"
+    style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 16px; display:flex; flex-direction:column; gap:14px;"
+  >
+    <input type="hidden" name="_subject" value="中塞通新投稿" />
+    <input type="hidden" name="_template" value="table" />
+    <input type="hidden" name="_captcha" value="false" />
+
+    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+      信息类型
+      <select name="category" required style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg); font-size:15px;">
+        <option value="">请选择</option>
+        <option value="rentals">租房</option>
+        <option value="secondhand">二手交易</option>
+        <option value="jobs">招聘求职</option>
+        <option value="supply">供求对接（找货源/找合作/清库存）</option>
+        <option value="news">新闻投稿（使馆/商会/要闻线索）</option>
+        <option value="guide">指南投稿（经验攻略）</option>
+      </select>
+    </label>
+
+    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+      图片（可选）
+      <input name="images" type="text" placeholder="有配图请添加图片链接，或发布后发给管理员补图" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px;" />
+    </label>
+
+    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+      标题
+      <input name="title" type="text" required placeholder="如：泽蒙区二室一厅出租 / 冰柜转让 / 招聘中文翻译" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px;" />
+    </label>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+        价格（可选）
+        <input name="price" type="text" placeholder="如 700€/月" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px;" />
+      </label>
+      <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+        位置（可选）
+        <input name="location" type="text" placeholder="如 新贝·泽蒙" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px;" />
+      </label>
+    </div>
+
+    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+      详细描述
+      <textarea name="body" rows="4" required placeholder="详细说明信息内容、成色、要求等" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px; resize:vertical;"></textarea>
+    </label>
+
+    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+      联系方式
+      <input name="contact" type="text" required placeholder="微信 / 电话 / 邮箱" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px;" />
+    </label>
+
+    <button type="submit" class="btn-primary" style="padding:11px; font-size:15px; border-radius:10px;">
+      提交审核
+    </button>
+  </form>
+</Base>

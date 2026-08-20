@@ -1,0 +1,34 @@
+---
+import { CATEGORIES } from '../data/site';
+interface Props {
+  active: string;
+}
+const { active } = Astro.props;
+---
+
+<nav
+  aria-label="分类"
+  style="display:flex; gap:4px; overflow-x:auto; padding:10px 0; -webkit-overflow-scrolling:touch; scrollbar-width:none;"
+>
+  {
+    CATEGORIES.map((c) => {
+      const isActive = active === c.key;
+      const href = c.key === 'all' ? '/' : `/${c.key}/`;
+      return (
+        <a
+          href={href}
+          style={`flex-shrink:0; padding:6px 16px; border-radius:18px; font-size:14px; transition:all .15s; ${
+            isActive
+              ? 'background:var(--red); color:#fff; font-weight:500;'
+              : 'background:var(--card); color:var(--text-secondary); border:1px solid var(--border);'
+          }`}
+        >
+          {c.label}
+        </a>
+      );
+    })
+  }
+  <style>
+    nav::-webkit-scrollbar { display: none; }
+  </style>
+</nav>

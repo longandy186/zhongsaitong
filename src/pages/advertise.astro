@@ -1,0 +1,67 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import { SITE, FORM_ENDPOINT } from '../data/site';
+---
+
+<Base title="广告合作 · 中塞通">
+  <Header />
+  <div class="section-title">广告合作</div>
+
+  <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 16px; margin-bottom:14px; font-size:14px; color:var(--text-secondary);">
+    中塞通面向全部在塞华人，覆盖 <span style="color:var(--red);font-weight:600;">70号商城华商、中资企业员工、留学生、新移民</span>。
+    提供以下推广方式，帮你的商家/品牌精准触达目标人群。
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:6px;">① 首页轮播 Banner</div>
+      <div style="font-size:13px; color:var(--text-secondary);">
+        首页顶部大图轮播，全站最高曝光位置。适合品牌活动、新店开业、大型招商。
+      </div>
+    </div>
+    <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:6px;">② 信息流广告卡片</div>
+      <div style="font-size:13px; color:var(--text-secondary);">
+        按频率插入首页信息流，与正常内容同形式，自然融入不打扰。
+      </div>
+    </div>
+    <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:6px;">③ 信息置顶 / 推广标记</div>
+      <div style="font-size:13px; color:var(--text-secondary);">
+        发布的信息可置顶 + 带"推广"标识，在分类列表里获得优先曝光。
+      </div>
+    </div>
+    <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:6px;">④ 公众号 / 视频号合作</div>
+      <div style="font-size:13px; color:var(--text-secondary);">
+        软文、视频口播、联合活动。公众号每日推送 + 视频号内容联动。
+      </div>
+    </div>
+  </div>
+
+  <form
+    action={FORM_ENDPOINT}
+    method="POST"
+    style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 16px; margin-top:16px; display:flex; flex-direction:column; gap:14px;"
+  >
+    <input type="hidden" name="_subject" value="中塞通广告合作咨询" />
+    <input type="hidden" name="_template" value="table" />
+    <input type="hidden" name="_captcha" value="false" />
+    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+      你的称呼 / 商家名
+      <input name="name" type="text" required style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px;" />
+    </label>
+    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+      联系方式
+      <input name="contact" type="text" required placeholder="微信 / 电话" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px;" />
+    </label>
+    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
+      想了解哪种推广？
+      <textarea name="message" rows="3" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px; resize:vertical;"></textarea>
+    </label>
+    <button type="submit" class="btn-primary" style="padding:11px; font-size:15px; border-radius:10px;">
+      提交咨询
+    </button>
+  </form>
+</Base>

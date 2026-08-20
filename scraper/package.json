@@ -1,0 +1,14 @@
+{
+  "name": "zhongsaitong-scraper",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "中塞通自动信息采集器（RSS + HTML + AI翻译）",
+  "scripts": {
+    "run": "node run.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "rss-parser": "^3.13.0"
+  }
+}

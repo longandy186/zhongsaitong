@@ -1,0 +1,50 @@
+---
+import { SOCIAL } from '../data/site';
+---
+
+<section
+  style="display:flex; align-items:center; gap:12px; background:linear-gradient(90deg, #1A1A2E 0%, #2D3436 100%); border-radius:var(--radius); padding:12px 14px; margin:12px 0; color:#fff;"
+>
+  <img src={SOCIAL.wechatQr} alt="公众号二维码" style="width:56px; height:56px; border-radius:8px; background:#fff; padding:3px; flex-shrink:0;" />
+  <div style="flex:1; min-width:0;">
+    <div style="font-size:15px; font-weight:700; margin-bottom:2px;">
+      {SOCIAL.wechatName} 公众号
+    </div>
+    <div style="font-size:12px; opacity:0.92;">
+      每天推送塞尔维亚华人要闻、使馆/商会动态，不错过重要信息
+    </div>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:6px; flex-shrink:0;">
+    <a
+      href="#wechat-pop"
+      onclick="document.getElementById('wechat-pop').style.display='block'"
+      style="background:#fff; color:#E94560; font-size:13px; font-weight:600; padding:5px 14px; border-radius:16px; text-align:center;"
+    >
+      公众号
+    </a>
+    <a
+      href={SOCIAL.channelUrl}
+      style="background:rgba(255,255,255,0.18); color:#fff; font-size:13px; font-weight:600; padding:5px 14px; border-radius:16px; text-align:center; border:1px solid rgba(255,255,255,0.5);"
+    >
+      视频号
+    </a>
+  </div>
+</section>
+
+<div
+  id="wechat-pop"
+  style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:200; align-items:center; justify-content:center;"
+  onclick="this.style.display='none'"
+>
+  <div style="background:#fff; border-radius:16px; padding:24px; text-align:center; max-width:260px; width:80%;" onclick="event.stopPropagation()">
+    <img src={SOCIAL.wechatQr} alt="公众号二维码" style="width:200px; height:200px; border-radius:8px; margin:0 auto;" />
+    <div style="font-size:15px; font-weight:600; margin-top:12px;">关注 {SOCIAL.wechatName}</div>
+    <div style="font-size:12px; color:var(--text-tertiary); margin-top:4px;">微信扫码，获取每日华人资讯</div>
+    <button
+      onclick="document.getElementById('wechat-pop').style.display='none'"
+      style="margin-top:14px; background:var(--bg); border:1px solid var(--border); border-radius:16px; padding:6px 24px; font-size:13px; cursor:pointer;"
+    >
+      关闭
+    </button>
+  </div>
+</div>

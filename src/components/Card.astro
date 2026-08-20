@@ -1,0 +1,81 @@
+---
+import { TYPE_STYLE, CATEGORY_LABEL } from '../data/site';
+import type { CollectionEntry } from 'astro:content';
+
+type Item = CollectionEntry<'items'>;
+
+interface Props {
+  item: Item;
+}
+const { item } = Astro.props;
+const { data, body } = item;
+const style = TYPE_STYLE[data.category];
+const summary = (body ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+const cover = data.images[0];
+const timeText = formatTime(data.date);
+
+function formatTime(d: Date): string {
+  const diff = Date.now() - d.getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return '刚刚';
+  if (m < 60) return `${m}分钟前`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}小时前`;
+  const days = Math.floor(h / 24);
+  if (days < 30) return `${days}天前`;
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+---
+
+<a
+  href={`/post/${item.id}/`}
+  data-kind={data.kind}
+  style="display:flex; flex-direction:column; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; transition:transform .15s, box-shadow .15s; position:relative;"
+>
+  {
+    cover ? (
+      <div style="position:relative; aspect-ratio:4/3; overflow:hidden; background:var(--bg);">
+        <img src={cover} alt={data.title} loading="lazy" style="width:100%; height:100%; object-fit:cover;" />
+        {data.images.length > 1 && (
+          <span style="position:absolute; right:8px; top:8px; background:rgba(0,0,0,0.55); color:#fff; font-size:11px; padding:2px 6px; border-radius:8px;">
+            {data.images.length}图
+          </span>
+        )}
+      </div>
+    ) : (
+      <div
+        style={`position:relative; aspect-ratio:4/3; display:flex; align-items:center; justify-content:center; background:${style.bg}; color:${style.color}; font-size:40px; font-weight:700;`}
+      >
+        {style.label}
+        {data.promoted && <span style="position:absolute; right:8px; top:8px; background:var(--red); color:#fff; font-size:10px; padding:1px 6px; border-radius:8px;">推广</span>}
+      </div>
+    )
+  }
+
+  <div style="padding:10px 12px 12px;">
+    <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+      <span style={`flex-shrink:0; width:18px; height:18px; border-radius:50%; font-size:10px; font-weight:600; display:flex; align-items:center; justify-content:center; background:${style.bg}; color:${style.color};`}>
+        {style.label}
+      </span>
+      <span style="font-size:11px; color:var(--text-tertiary); flex-shrink:0;">{CATEGORY_LABEL[data.category]}</span>
+      {data.promoted && (
+        <span style="font-size:10px; color:var(--red); border:1px solid var(--red); border-radius:6px; padding:0 4px; flex-shrink:0;">推广</span>
+      )}
+      <span style="flex:1;"></span>
+      <span style="font-size:11px; color:var(--text-tertiary); flex-shrink:0;">{timeText}</span>
+    </div>
+
+    <h2 style="font-size:14px; font-weight:600; line-height:1.4; margin-bottom:6px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">
+      {data.title}
+    </h2>
+
+    <div style="display:flex; align-items:center; gap:6px; font-size:12px;">
+      {data.price && (
+        <span style="color:var(--red); font-weight:700; font-size:15px; flex-shrink:0;">{data.price}</span>
+      )}
+      {data.location && (
+        <span style="color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{data.location}</span>
+      )}
+    </div>
+  </div>
+</a>

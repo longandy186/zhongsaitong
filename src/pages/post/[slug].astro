@@ -1,0 +1,94 @@
+---
+import Base from '../../layouts/Base.astro';
+import Header from '../../components/Header.astro';
+import { getCollection } from 'astro:content';
+import { TYPE_STYLE, CATEGORY_LABEL, NEWS_KINDS, SOCIAL } from '../../data/site';
+
+export async function getStaticPaths() {
+  const items = await getCollection('items');
+  return items.map((item) => ({ params: { slug: item.id }, props: { item } }));
+}
+
+const { item } = Astro.props;
+const { data } = item;
+const { Content } = await item.render();
+const style = TYPE_STYLE[data.category];
+const categoryLabel = CATEGORY_LABEL[data.category];
+const kindLabel = NEWS_KINDS.find((k) => k.key === data.kind)?.label;
+
+function formatDate(d: Date): string {
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+---
+
+<Base title={`${data.title} · 中塞通`}>
+  <Header />
+
+  <article style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 16px; margin-top:12px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+      <span style={`width:22px; height:22px; border-radius:50%; font-size:11px; font-weight:600; display:flex; align-items:center; justify-content:center; background:${style.bg}; color:${style.color};`}>
+        {style.label}
+      </span>
+      <span style="font-size:13px; color:var(--text-secondary);">{categoryLabel}</span>
+      {data.category === 'news' && kindLabel && kindLabel !== '中塞要闻' && (
+        <span style="font-size:11px; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:1px 8px; color:var(--text-secondary);">{kindLabel}</span>
+      )}
+      <span style="flex:1;"></span>
+      <span style="font-size:12px; color:var(--text-tertiary);">{formatDate(data.date)}</span>
+    </div>
+
+    <h1 style="font-size:20px; font-weight:700; line-height:1.4; margin-bottom:12px;">{data.title}</h1>
+
+    {data.price && (
+      <div style="font-size:20px; font-weight:700; color:var(--red); margin-bottom:8px;">{data.price}</div>
+    )}
+    {data.location && (
+      <div style="font-size:13px; color:var(--text-secondary); margin-bottom:4px;">位置：{data.location}</div>
+    )}
+
+    {data.images.length > 0 && (
+      <div style="display:flex; gap:8px; overflow-x:auto; margin:14px -4px 0; padding:0 4px 6px; scrollbar-width:none;">
+        {data.images.map((img, i) => (
+          <img
+            src={img}
+            alt={`${data.title} ${i + 1}`}
+            loading="lazy"
+            style="width:200px; height:150px; object-fit:cover; border-radius:8px; flex-shrink:0;"
+          />
+        ))}
+      </div>
+    )}
+
+    <div style="margin-top:14px; font-size:15px; line-height:1.8;">
+      <Content />
+    </div>
+
+    <div style="margin-top:20px; padding-top:14px; border-top:1px solid var(--border);">
+      {data.contact && (
+        <div style="font-size:14px; margin-bottom:10px;">
+          联系方式：
+          <span style="color:var(--blue); font-weight:600;">{data.contact}</span>
+        </div>
+      )}
+      <div style="font-size:12px; color:var(--text-tertiary);">
+        {data.source ? `信息来源：${data.source} · ` : ''}信息仅供参考，交易请自行核实风险
+      </div>
+    </div>
+  </article>
+
+  <div style="display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-top:12px;">
+    <img src={SOCIAL.wechatQr} alt="公众号二维码" style="width:52px; height:52px; border-radius:8px; background:var(--bg); padding:3px; flex-shrink:0;" />
+    <div style="flex:1;">
+      <div style="font-size:14px; font-weight:600;">关注 {SOCIAL.wechatName}</div>
+      <div style="font-size:12px; color:var(--text-tertiary);">第一时间获取塞尔维亚华人资讯</div>
+    </div>
+    <a href={SOCIAL.channelUrl} style="flex-shrink:0; background:var(--bg); border:1px solid var(--border); border-radius:16px; padding:6px 14px; font-size:13px;">视频号</a>
+  </div>
+
+  <a
+    href="/"
+    style="display:block; text-align:center; margin-top:16px; font-size:14px; color:var(--text-secondary);"
+  >
+    ← 返回首页
+  </a>
+</Base>

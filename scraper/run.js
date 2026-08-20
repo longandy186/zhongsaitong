@@ -1,0 +1,304 @@
+// 中塞通 · 自动采集主流程
+// 用法：ZHIPU_API_KEY=xxx node run.js   （无 key 也能跑，只采集中文源）
+// 输出：在 src/content/items/ 生成 .md 文件，push 后自动部署上线
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import Parser from 'rss-parser';
+import * as cheerio from 'cheerio';
+import { SOURCES, TOPIC_KEYWORDS, BLOCK_WORDS } from './sources.js';
+import { translateNews, polishChinese, hasKey } from './translate.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ITEMS_DIR = path.resolve(__dirname, '../src/content/items');
+const STATE_FILE = path.join(__dirname, 'state.json');
+
+// 加载本地 .env（GitHub Actions 中由 secrets 注入；已显式设置的环境变量优先级更高）
+try {
+  const envText = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+  for (const line of envText.split('\n')) {
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].trim();
+  }
+} catch {
+  /* .env 不存在则忽略 */
+}
+
+const parser = new Parser({
+  timeout: 15000,
+  headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+});
+
+// ---------- 去重：收集现有 items 的 source+title ----------
+function loadExisting() {
+  const seen = new Set();
+  if (!fs.existsSync(ITEMS_DIR)) return seen;
+  for (const f of fs.readdirSync(ITEMS_DIR)) {
+    if (!f.endsWith('.md')) continue;
+    const content = fs.readFileSync(path.join(ITEMS_DIR, f), 'utf8');
+    const clean = (s) => (s ?? '').replace(/^"+|"+$/g, '').trim();
+    const source = clean(content.match(/^source:\s*(.+)$/m)?.[1]);
+    // 用原始标题做去重键（AI 改写后的 title 不稳定）
+    const srcTitle = clean(content.match(/^sourceTitle:\s*(.+)$/m)?.[1]);
+    const title = srcTitle || clean(content.match(/^title:\s*(.+)$/m)?.[1]);
+    if (title) seen.add(`${source}|${title}`);
+  }
+  return seen;
+}
+
+// ---------- 关键词命中 ----------
+function hitKeywords(text, keywords) {
+  const t = text.toLowerCase();
+  return keywords.some((k) => t.includes(k.toLowerCase()));
+}
+
+// ---------- 自动分类（用于审核筛选）：中塞 / 生活 / 其他 ----------
+const CNRS_WORDS = ['中国', '塞尔维亚', '中塞', '匈塞', '贝尔格莱德', '华商', '华人', '在塞', '赴塞', '塞国', 'kina', 'kinesk', 'china', 'serbia'];
+const LIFE_WORDS = [
+  '签证', '居留', '工作许可', '工作', '就业', '租房', '买房', '房价', '物价', '通胀',
+  '汇率', '换汇', '医疗', '医院', '医保', '疫苗', '学校', '教育', '留学', '交通',
+  '天气', '税务', '养老金', '补贴', '工资', '驾照', '保险', '使馆', '领事', '航班',
+  '机场', '公交', '地铁', '水电', '网络', '电话', '银行', '超市', '移民', '入籍',
+  '放假', '假期', '节假日', '节日',
+];
+function classifyTopic(text) {
+  const t = (text || '').toLowerCase();
+  if (CNRS_WORDS.some((w) => t.includes(w))) return '中塞';
+  if (LIFE_WORDS.some((w) => t.includes(w))) return '生活';
+  return '其他';
+}
+
+// ---------- HTML 抓取（使馆公告） ----------
+async function fetchHtmlSource(source) {
+  const resp = await fetch(source.url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const html = await resp.text();
+  const $ = cheerio.load(html);
+  const items = [];
+  const base = new URL(source.url).origin;
+  $(source.selector).each((_, el) => {
+    const $a = $(el);
+    const title = $a.text().trim().replace(/\s+/g, ' ');
+    if (!title) return;
+    const rawHref = $a.attr('href') ?? '';
+    if (!rawHref) return;
+    // 跳过非文章链接（如 js 或分类页）
+    if (/\.htm|\.shtml|\.html/.test(rawHref)) {
+      let link;
+      try {
+        link = new URL(rawHref, source.url).href;
+      } catch {
+        link = base + rawHref.replace(/^\.\//, '/');
+      }
+      // 提取标题尾部日期（使馆格式："标题（2026-04-22）"）
+      const m = title.match(/^(.*)（(\d{4}-\d{2}-\d{2})）$/);
+      const cleanTitle = m ? m[1].trim() : title;
+      const pubDate = m ? new Date(m[2]) : new Date();
+      items.push({ title: cleanTitle, link, content: '', pubDate });
+    }
+  });
+  // 去重并限制条数
+  const seen = new Set();
+  const uniq = [];
+  for (const it of items) {
+    if (seen.has(it.link)) continue;
+    seen.add(it.link);
+    uniq.push(it);
+    if (uniq.length >= 15) break;
+  }
+  return uniq;
+}
+
+// ---------- RSS 抓取 ----------
+async function fetchRssSource(source) {
+  const feed = await parser.parseURL(source.url);
+  // RSS 内部去重（按链接）
+  const seenLinks = new Set();
+  const items = (feed.items ?? [])
+    .slice(0, source.maxItems ?? 25)
+    .map((it) => ({
+      title: (it.title ?? '').trim().replace(/\s+/g, ' '),
+      link: it.link ?? it.guid ?? '',
+      content: (it.contentSnippet ?? it.content ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+      pubDate: it.isoDate ? new Date(it.isoDate) : new Date(),
+    }))
+    .filter((it) => it.title && !seenLinks.has(it.link) && seenLinks.add(it.link));
+  // 关键词过滤：源显式给了 keywords 才过滤；空 keywords 表示全量收录
+  // （塞语本地媒体全量翻译，中文国际媒体按中塞关键词筛）
+  const keywords = source.keywords ?? [];
+  const filtered = keywords.length
+    ? items.filter((it) => hitKeywords(`${it.title} ${it.content}`, keywords))
+    : items;
+  return filtered;
+}
+// ---------- 生成 .md ----------
+function buildMd(entry) {
+  const { source, item, category, kind, finalTitle, body, note, topic } = entry;
+  const d = item.pubDate ?? new Date();
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate()
+  ).padStart(2, '0')}`;
+  const tags = item.tags?.length ? item.tags : ['新闻'];
+  const srcText = item.link ? `[${source.name}](${item.link})` : source.name;
+  const esc = (s) => `"${String(s).replace(/"/g, "'")}"`;
+
+  const fm = [
+    '---',
+    `title: ${esc(finalTitle)}`,
+    `sourceTitle: ${esc(item.title)}`,
+    `category: ${category}`,
+    `kind: ${kind}`,
+    `date: ${dateStr}`,
+    'status: pending',
+    `source: ${esc(source.name)}`,
+    `topic: ${topic ?? '其他'}`,
+    `tags: [${tags.map((t) => `"${t}"`).join(', ')}]`,
+    '---',
+    '',
+  ].join('\n');
+
+  const lines = [
+    `# ${finalTitle}`,
+    '',
+    ...body.map((l) => l.replace(/\s+/g, ' ').trim()),
+    '',
+    `> 本文由 ${srcText} 自动采集整理${note ? '，' + note : ''}`,
+  ];
+  return fm + lines.join('\n');
+}
+
+// 功能性页面标题（使馆站内导航类，跳过）
+const FUNCTIONAL_TITLES = ['联系我们', '收藏本站', '设为首页', '网站地图', '版权声明', '免责声明'];
+
+// ---------- 对单条新闻做翻译/精炼 ----------
+async function processEntry(source, item) {
+  // 敏感词拦截
+  if (BLOCK_WORDS.some((w) => item.title.toLowerCase().includes(w.toLowerCase()))) return null;
+  // 功能性页面跳过
+  if (FUNCTIONAL_TITLES.some((w) => item.title.includes(w))) return null;
+
+  let finalTitle = item.title;
+  let summary = item.content.slice(0, 150);
+  let tags = null;
+  let note = '';
+
+  if (source.lang === 'sr') {
+    // 塞尔维亚语 → 中文翻译
+    const t = await translateNews(item.title, item.content);
+    if (t) {
+      finalTitle = t.title;
+      summary = t.summary;
+      tags = t.tags;
+      note = 'AI 翻译，仅供参考';
+    } else {
+      // 无翻译能力则跳过塞语内容
+      return null;
+    }
+  } else if (hasKey()) {
+    // 中文源精炼
+    const p = await polishChinese(item.title, item.content.slice(0, 1500));
+    if (p?.title) {
+      finalTitle = p.title;
+      if (p.summary) summary = p.summary;
+      tags = p.tags;
+      note = 'AI 整理';
+    }
+  }
+
+  return {
+    source,
+    item: { ...item, tags },
+    category: source.category,
+    kind: source.kind,
+    finalTitle,
+    topic: classifyTopic(`${finalTitle} ${summary}`),
+    body: [
+      summary ? summary : '',
+      item.link ? `原文链接：[${item.title}](${item.link})` : '',
+    ].filter(Boolean),
+    note,
+  };
+}
+
+// ---------- 主流程 ----------
+async function main() {
+  const existing = loadExisting();
+  const enabled = SOURCES.filter((s) => s.enabled && s.url);
+  const created = [];
+  const skipped = [];
+  const failed = [];
+  const summary = [];
+
+  for (const source of enabled) {
+    try {
+      let items = source.type === 'rss' ? await fetchRssSource(source) : await fetchHtmlSource(source);
+      summary.push(`${source.name}: 抓取 ${items.length} 条`);
+
+      for (const item of items) {
+        // 去重
+        if (existing.has(`${source.name}|${item.title}`)) {
+          skipped.push(item.title);
+          continue;
+        }
+        // 使馆 HTML 标题带日期，去掉尾部日期括号用于去重键
+        const cleanTitle = item.title.replace(/\s*（\d{4}-\d{2}-\d{2}）$/, '');
+        if (existing.has(`${source.name}|${cleanTitle}`)) {
+          skipped.push(item.title);
+          continue;
+        }
+
+        const entry = await processEntry(source, item);
+        if (!entry) {
+          skipped.push(item.title);
+          continue;
+        }
+
+        // 写入文件
+        const d = item.pubDate ?? new Date();
+        const datePrefix = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(
+          d.getDate()
+        ).padStart(2, '0')}`;
+        const slug = source.name.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').slice(-6) || 'src';
+        const filename = `${datePrefix}-${slug}-${created.length + 1}.md`;
+        const md = buildMd(entry);
+        fs.writeFileSync(path.join(ITEMS_DIR, filename), md, 'utf8');
+        existing.add(`${source.name}|${item.title}`);
+        created.push({ file: filename, title: entry.finalTitle });
+      }
+    } catch (e) {
+      failed.push(`${source.name}: ${e.message}`);
+      summary.push(`${source.name}: 失败 (${e.message.slice(0, 60)})`);
+    }
+  }
+
+  // 写报告
+  const report = {
+    time: new Date().toISOString(),
+    created: created.length,
+    skipped: skipped.length,
+    failed: failed.length,
+    hasTranslateKey: hasKey(),
+    sources: summary,
+  };
+  fs.writeFileSync(STATE_FILE, JSON.stringify(report, null, 2), 'utf8');
+
+  console.log('===== 采集报告 =====');
+  for (const s of summary) console.log('·', s);
+  console.log(`\n新增 ${created.length} 条，跳过 ${skipped.length} 条，失败 ${failed.length} 个源`);
+  if (failed.length) {
+    console.log('\n失败源：');
+    failed.forEach((f) => console.log('·', f));
+  }
+  if (!hasKey()) {
+    console.log('\n[提示] 未配置 ZHIPU_API_KEY，塞尔维亚语源已跳过翻译。注册智谱获取免费 key：bigmodel.cn');
+  }
+}
+
+main().catch((e) => {
+  console.error('采集器异常退出：', e);
+  process.exit(1);
+});

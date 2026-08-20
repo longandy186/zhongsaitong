@@ -1,0 +1,31 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import Card from '../components/Card.astro';
+import { getCollection } from 'astro:content';
+
+const q = Astro.url.searchParams.get('q')?.trim().toLowerCase() ?? '';
+const all = await getCollection('items');
+const items = all
+  .filter((i) => i.data.status === 'active')
+  .filter((i) => {
+    if (!q) return false;
+    const haystack = `${i.data.title} ${i.body ?? ''} ${i.data.location ?? ''}`.toLowerCase();
+    return haystack.includes(q);
+  })
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+---
+
+<Base title={`搜索：${q} · 中塞通`}>
+  <Header />
+  <div class="section-title">{q ? `搜索 "${q}" 的结果` : '搜索'}</div>
+  {
+    !q ? (
+      <div class="empty">请输入关键词搜索</div>
+    ) : items.length === 0 ? (
+      <div class="empty">没有找到与 "{q}" 相关的信息</div>
+    ) : (
+      items.map((item) => <Card item={item} />)
+    )
+  }
+</Base>

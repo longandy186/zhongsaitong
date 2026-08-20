@@ -1,0 +1,33 @@
+---
+import { SITE } from '../data/site';
+---
+
+<header
+  style="position:sticky; top:0; z-index:100; background:rgba(248,249,250,0.85); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-bottom:1px solid var(--border);"
+>
+  <div style="display:flex; align-items:center; gap:12px; height:56px;">
+    <a href="/" style="display:flex; align-items:center; gap:10px; font-weight:800; font-size:16px; letter-spacing:-0.3px;">
+      <span
+        style="width:36px; height:36px; border-radius:10px; background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; letter-spacing:0.5px;"
+      >
+        SRB
+      </span>
+      <span style="color:var(--ink);">塞尔维亚华人信息网</span>
+    </a>
+    <span style="flex:1;"></span>
+    <form action="/search" method="get" style="display:flex; align-items:center; background:var(--card); border:1px solid var(--border); border-radius:18px; padding:0 12px; height:32px; width:120px;">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="margin-right:6px;">
+        <circle cx="5" cy="5" r="3.5" stroke="var(--ash)" />
+        <path d="M8 8l2.5 2.5" stroke="var(--ash)" />
+      </svg>
+      <input
+        name="q"
+        type="search"
+        placeholder="搜索"
+        aria-label="搜索"
+        style="border:none; outline:none; background:transparent; font-size:13px; width:100%; color:var(--charcoal);"
+      />
+    </form>
+    <a href="/publish" class="btn-primary" style="flex-shrink:0; border-radius:14px;">发布</a>
+  </div>
+</header>

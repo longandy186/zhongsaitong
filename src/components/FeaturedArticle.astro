@@ -1,0 +1,70 @@
+---
+import { getCollection } from 'astro:content';
+
+const all = await getCollection('items');
+const featured = all
+  .filter((i) => i.data.status === 'active' && i.data.category === 'guide')
+  .sort(
+    (a, b) =>
+      Number(b.data.featured) - Number(a.data.featured) ||
+      b.data.date.getTime() - a.data.date.getTime()
+  )[0];
+
+const { data, body } = featured ?? { data: null, body: '' };
+const excerpt = body ? body.replace(/[#>*\-\s]/g, '').slice(0, 60) : '';
+---
+
+{
+  data && (
+    <section class="featured-article">
+      <a href={`/post/${featured.id}/`} class="featured-inner animate-fade-up">
+        <div class="featured-tag">深度指南</div>
+        <h2 class="featured-title">{data.title}</h2>
+        <p class="featured-excerpt">{excerpt || data.description}</p>
+        <div class="featured-meta">
+          <span>塞尔维亚生活指南</span>
+          <span class="meta-sep">·</span>
+          <span>
+            {data.date.getFullYear()}/{data.date.getMonth() + 1}/{data.date.getDate()}
+          </span>
+        </div>
+        <div class="featured-link">
+          阅读全文
+          <span class="link-line"></span>
+        </div>
+      </a>
+    </section>
+  )
+}
+
+<style>
+  .featured-article { padding: 16px 0 8px; }
+  .featured-inner {
+    display: block;
+    background: var(--ink);
+    color: #fff;
+    border-radius: 24px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .featured-inner::before {
+    content: '';
+    position: absolute;
+    top: -60%;
+    right: -20%;
+    width: 280px;
+    height: 280px;
+    background: var(--crimson);
+    border-radius: 50%;
+    opacity: 0.18;
+    filter: blur(60px);
+  }
+  .featured-tag { display: inline-block; padding: 5px 14px; background: var(--crimson); color: #fff; font-size: 12px; font-weight: 700; border-radius: 20px; margin-bottom: 16px; position: relative; z-index: 1; }
+  .featured-title { font-size: 22px; font-weight: 800; line-height: 1.3; letter-spacing: -0.5px; margin-bottom: 12px; position: relative; z-index: 1; }
+  .featured-excerpt { font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.75); margin-bottom: 20px; position: relative; z-index: 1; }
+  .featured-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 20px; position: relative; z-index: 1; }
+  .featured-link { display: inline-flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 700; color: #fff; position: relative; z-index: 1; }
+  .link-line { display: inline-block; width: 40px; height: 2px; background: #fff; transition: width 0.3s ease; }
+  .featured-inner:active .link-line { width: 60px; }
+</style>
