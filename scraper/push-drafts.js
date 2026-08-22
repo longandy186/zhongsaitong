@@ -32,45 +32,68 @@ const headers = {
   Accept: 'application/vnd.github+json',
 };
 
-function isPending(raw) {
-  return /^status:\s*pending\s*$/m.test(raw);
+function statusOf(raw) {
+  const m = raw.match(/^status:\s*(\w+)\s*$/m);
+  return m ? m[1] : '';
 }
 
-async function pushOne(file) {
+async function pushOne(file, branch) {
   const raw = fs.readFileSync(path.join(ITEMS_DIR, file), 'utf8');
-  if (!isPending(raw)) return `${file}: 跳过(非 pending)`;
   const contentB64 = Buffer.from(raw, 'utf8').toString('base64');
   const filePath = `src/content/items/${encodeURIComponent(file)}`;
   const api = `https://api.github.com/repos/${REPO}/contents/${filePath}`;
-  // 先查 drafts 是否已有（拿 sha 以便更新）
+  // 先查目标分支是否已有（拿 sha 以便更新）
   let sha = null;
   try {
-    const r = await fetch(`${api}?ref=${DRAFT_BRANCH}`, { headers });
+    const r = await fetch(`${api}?ref=${branch}`, { headers });
     if (r.ok) sha = (await r.json()).sha;
   } catch { /* ignore */ }
   const res = await fetch(api, {
     method: 'PUT',
     headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({
-      message: `draft: ${file}`,
+      message: `${branch === 'main' ? 'publish' : 'draft'}: ${file}`,
       content: contentB64,
-      branch: DRAFT_BRANCH,
+      branch,
       ...(sha ? { sha } : {}),
     }),
   });
-  if (res.ok) return `${file}: ✅ 已推草稿`;
+  if (res.ok) return `${file}: ✅ 已推${branch === 'main' ? '主分支(自动发布)' : '草稿'}`;
   const t = await res.text().catch(() => '');
   return `${file}: 失败(${res.status}) ${t.slice(0, 160)}`;
 }
 
 async function main() {
   const files = fs.readdirSync(ITEMS_DIR).filter((f) => f.endsWith('.md'));
+
+  // 1) 过期清理：本地 active 且 expireAt 已过 → 翻 expired 并推 main（下线展示）
+  for (const f of files) {
+    const p = path.join(ITEMS_DIR, f);
+    let raw = fs.readFileSync(p, 'utf8');
+    if (statusOf(raw) !== 'active') continue;
+    const em = raw.match(/^expireAt:\s*(\S+)\s*$/m);
+    if (!em) continue;
+    const exp = new Date(em[1]);
+    if (!isNaN(exp) && exp < new Date()) {
+      raw = raw.replace(/^status:\s*active\s*$/m, 'status: expired');
+      fs.writeFileSync(p, raw, 'utf8');
+      console.log('·', await pushOne(f, 'main'));
+    }
+  }
+
+  // 2) 常规推送：pending→drafts（飞书审核），active（自动发布）→ main
   const out = [];
-  for (const f of files) out.push(await pushOne(f));
+  for (const f of files) {
+    const raw = fs.readFileSync(path.join(ITEMS_DIR, f), 'utf8');
+    const st = statusOf(raw);
+    if (st === 'pending') out.push(await pushOne(f, DRAFT_BRANCH));
+    else if (st === 'active') out.push(await pushOne(f, 'main'));
+    // expired / done 跳过
+  }
   console.log('===== push-drafts 结果 =====');
   out.forEach((l) => console.log('·', l));
   const pushed = out.filter((l) => l.includes('✅')).length;
-  console.log(`\n共扫描 ${out.length} 个文件，推送 ${pushed} 条草稿到 ${DRAFT_BRANCH} 分支`);
+  console.log(`\n共处理 ${out.length} 个文件，推送 ${pushed} 条`);
 }
 
 main().catch((e) => { console.error('[push-drafts] 异常:', e); process.exit(1); });

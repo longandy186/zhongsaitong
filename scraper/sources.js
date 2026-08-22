@@ -91,6 +91,21 @@ export const SOURCES = [
     keywords: ['塞尔维亚', '贝尔格莱德', '中塞', '华商', '塞国'],
     enabled: false,
   },
+  // ---- 租房：华人社区公众号（RSSHub/wechat2rss 转 RSS）----
+  // autoPublish=true：自动发布、不经飞书逐条审核；写入即 active + 30 天 expireAt。
+  // URL 就绪后把 enabled 改为 true 即可。
+  {
+    name: '华人社区租房 (微信公众号-RSSHub)',
+    type: 'rss',
+    url: '', // TODO: 填入 RSSHub/wechat2rss 实例地址，如 https://rsshub.example.com/wechat/...
+    category: 'rentals',
+    kind: 'rental',
+    lang: 'zh',
+    keywords: [], // 全量收录该号租房帖
+    maxItems: 30,
+    autoPublish: true,
+    enabled: false,
+  },
   // ---- 塞尔维亚本地媒体（塞语，自动翻译；空 keywords=回退 TOPIC_KEYWORDS 中塞相关过滤）----
   {
     name: 'B92-塞尔维亚媒体',

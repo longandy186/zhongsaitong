@@ -69,6 +69,16 @@ function classifyTopic(text) {
   return '其他';
 }
 
+// 租房类：从中文正文尽力抽取价格/地段（v1 粗提取，后续可接结构化解析）
+function extractRental(text) {
+  const t = text || '';
+  const priceM = t.match(/(\d[\d\s.,]*\d|\d)\s*(欧元|欧|€|EUR|RSD|第纳尔|din\b|rsd\b)/i);
+  const price = priceM ? priceM[0].replace(/\s+/g, '') : '';
+  const locM = t.match(/(?:位于|地点|区域|在|靠近|近)\s*([一-龥A-Za-z·]+?)(?:区|市|附近|一带|周边|站|中心)/);
+  const location = locM ? locM[1] : '';
+  return { price, location };
+}
+
 // ---------- HTML 抓取（使馆公告） ----------
 async function fetchHtmlSource(source) {
   const resp = await fetch(source.url, {
@@ -137,29 +147,41 @@ async function fetchRssSource(source) {
 }
 // ---------- 生成 .md ----------
 function buildMd(entry) {
-  const { source, item, category, kind, finalTitle, body, note, topic } = entry;
+  const { source, item, category, kind, finalTitle, body, note, topic, autoPublish, price, location, contact, summary } = entry;
   const d = item.pubDate ?? new Date();
   const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
     d.getDate()
   ).padStart(2, '0')}`;
-  const tags = item.tags?.length ? item.tags : ['新闻'];
+  const tags = item.tags?.length ? item.tags : [autoPublish ? '租房' : '新闻'];
   const srcText = item.link ? `[${source.name}](${item.link})` : source.name;
   const esc = (s) => `"${String(s).replace(/"/g, "'")}"`;
 
-  const fm = [
+  // 自动发布类（如租房）：直接 active + 30 天过期，不经飞书审核
+  const fmLines = [
     '---',
     `title: ${esc(finalTitle)}`,
     `sourceTitle: ${esc(item.title)}`,
     `category: ${category}`,
     `kind: ${kind}`,
     `date: ${dateStr}`,
-    'status: pending',
-    `source: ${esc(source.name)}`,
-    `topic: ${topic ?? '其他'}`,
-    `tags: [${tags.map((t) => `"${t}"`).join(', ')}]`,
-    '---',
-    '',
-  ].join('\n');
+    `status: ${autoPublish ? 'active' : 'pending'}`,
+  ];
+  if (autoPublish) {
+    const exp = new Date(d.getTime() + 30 * 86400000);
+    const expStr = `${exp.getFullYear()}-${String(exp.getMonth() + 1).padStart(2, '0')}-${String(
+      exp.getDate()
+    ).padStart(2, '0')}`;
+    fmLines.push(`expireAt: ${expStr}`);
+  }
+  fmLines.push(`source: ${esc(source.name)}`);
+  fmLines.push(`topic: ${autoPublish ? '生活' : topic ?? '其他'}`);
+  if (price) fmLines.push(`price: ${esc(price)}`);
+  if (location) fmLines.push(`location: ${esc(location)}`);
+  if (contact) fmLines.push(`contact: ${esc(contact)}`);
+  if (summary) fmLines.push(`summary: ${esc(summary)}`);
+  fmLines.push(`tags: [${tags.map((t) => `"${t}"`).join(', ')}]`);
+  fmLines.push('---', '');
+  const fm = fmLines.join('\n');
 
   const lines = [
     `# ${finalTitle}`,
@@ -185,8 +207,16 @@ async function processEntry(source, item) {
   let summary = item.content.slice(0, 150);
   let tags = null;
   let note = '';
+  let price, location, contact;
 
-  if (source.lang === 'sr') {
+  if (source.autoPublish) {
+    // 自动发布类（如租房）：保留原文，不做 AI 改写，避免误改价格/户型等关键信息
+    if (source.category === 'rentals') {
+      const ex = extractRental(`${item.title} ${item.content}`);
+      price = ex.price;
+      location = ex.location;
+    }
+  } else if (source.lang === 'sr') {
     // 塞尔维亚语 → 中文翻译
     const t = await translateNews(item.title, item.content);
     if (t) {
@@ -214,6 +244,7 @@ async function processEntry(source, item) {
     item: { ...item, tags },
     category: source.category,
     kind: source.kind,
+    autoPublish: !!source.autoPublish,
     finalTitle,
     topic: classifyTopic(`${finalTitle} ${summary}`),
     body: [
@@ -221,6 +252,10 @@ async function processEntry(source, item) {
       item.link ? `原文链接：[${item.title}](${item.link})` : '',
     ].filter(Boolean),
     note,
+    price,
+    location,
+    contact,
+    summary,
   };
 }
 

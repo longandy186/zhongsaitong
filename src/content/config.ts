@@ -7,14 +7,16 @@ const items = defineCollection({
     title: z.string(),
     sourceTitle: z.string().optional(),
     category: z.enum(['rentals', 'secondhand', 'jobs', 'news', 'guide', 'supply']),
-    // 新闻子类型：使馆动态 / 商会动态 / 要闻（仅 news 使用）
-    kind: z.enum(['embassy', 'chamber', 'news']).default('news'),
+    // 新闻子类型：使馆动态 / 商会动态 / 要闻（仅 news 使用）；rental 用于自动发布的租房帖
+    kind: z.enum(['embassy', 'chamber', 'news', 'rental']).default('news'),
     price: z.string().optional(),
     location: z.string().optional(),
     date: z.coerce.date(),
     contact: z.string().optional(),
     featured: z.boolean().default(false),
     status: z.enum(['active', 'pending', 'expired', 'done']).default('active'),
+    // 自动发布内容的过期时间（如租房）：超过则翻为 expired，不再展示
+    expireAt: z.coerce.date().optional(),
     // 多图，第一张用于卡片
     images: z.array(z.string()).default([]),
     tags: z.array(z.string()).default([]),
