@@ -33,7 +33,9 @@ function hmac(action, payload) {
 function approveUrl(action, payload) {
   const sig = hmac(action, payload);
   const q = new URLSearchParams({ action, sig });
-  if (action === 'batch') q.set('ids', payload);
+  // 多 id（批量）一律走 ids 参数；单条走 id 参数。
+  // approve.js 对 skip 的批量也读 ids 参数，确保「全部跳过」生效。
+  if (payload.includes(',')) q.set('ids', payload);
   else q.set('id', payload);
   return `${APPROVE_URL}?${q.toString()}`;
 }
@@ -64,47 +66,60 @@ function readPending() {
 }
 
 // ---------- 生成 Markdown ----------
-function buildMarkdown(items) {
+// opts.heading: 卡片内 H2 标题（分批时用，如「待审核 1-15/50」）
+function buildMarkdown(items, opts = {}) {
+  const heading = opts.heading || `📰 中塞通 · 待审核 ${items.length} 条`;
   const groups = { 中塞: [], 生活: [], 其他: [] };
   for (const it of items) (groups[it.topic] || groups['其他']).push(it);
 
-  let md = `## 📰 中塞通 · 待审核 ${items.length} 条\n\n`;
+  let md = `## ${heading}\n\n`;
   md += `点击下方链接即可在手机上审核发布，无需开电脑。\n\n`;
 
   for (const g of ['中塞', '生活', '其他']) {
     const list = groups[g];
     if (!list.length) continue;
     md += `### ${g}（${list.length}）\n`;
-    for (const it of list.slice(0, MAX_ITEMS)) {
+    for (const it of list) {
       const pub = approveUrl('publish', it.id);
       const skip = approveUrl('skip', it.id);
       md += `- ${it.title}\n  [✅ 发布](${pub}) · [⏭ 跳过](${skip})\n`;
     }
-    if (list.length > MAX_ITEMS) md += `_…其余 ${list.length - MAX_ITEMS} 条请到后台审核_\n`;
     md += `\n`;
   }
+  return md;
+}
 
+// 批量操作卡：一键发布全部「中塞+生活」或一键全部跳过
+function buildBatchMarkdown(items) {
+  let md = `## 📰 中塞通 · 批量操作\n\n`;
   const zhLife = items.filter((i) => ['中塞', '生活'].includes(i.topic)).map((i) => i.id);
-  md += `### 一键操作\n`;
   if (zhLife.length) md += `- [🚀 发布全部「中塞+生活」](${approveUrl('batch', zhLife.join(','))})\n`;
   md += `- [🗑 全部跳过](${approveUrl('skip', items.map((i) => i.id).join(','))})\n`;
   return md;
 }
 
 // ---------- 渠道分发（可插拔） ----------
-async function send(channel, text, items) {
-  if (channel === 'feishu') {
-    const hook = process.env.FEISHU_WEBHOOK;
-    if (!hook) throw new Error('FEISHU_WEBHOOK 未配置');
+
+// 飞书：每条 interactive 卡片的 markdown 有长度上限，按每卡 ≤ MAX_ITEMS 分批，
+// 确保全部待审条目都可点击，不再有「其余 N 条请到后台」的占位。
+async function sendFeishu(items) {
+  const hook = process.env.FEISHU_WEBHOOK;
+  if (!hook) throw new Error('FEISHU_WEBHOOK 未配置');
+  const total = items.length;
+  const PER = MAX_ITEMS;
+  let sent = 0;
+  for (let i = 0; i < items.length; i += PER) {
+    const chunk = items.slice(i, i + PER);
+    const start = i + 1;
+    const end = i + chunk.length;
+    const headerTitle = `中塞通 · 待审核 ${start}-${end}/${total}`;
+    const md = buildMarkdown(chunk, { heading: `待审核 ${start}-${end}/${total}（共 ${total}）` });
     const card = {
       msg_type: 'interactive',
       card: {
         config: { wide_screen_mode: true },
-        header: {
-          title: { tag: 'plain_text', content: `中塞通 · 待审核 ${items.length} 条` },
-          template: 'red',
-        },
-        elements: [{ tag: 'markdown', content: text }],
+        header: { title: { tag: 'plain_text', content: headerTitle }, template: 'red' },
+        elements: [{ tag: 'markdown', content: md }],
       },
     };
     const r = await fetch(hook, {
@@ -113,8 +128,29 @@ async function send(channel, text, items) {
       body: JSON.stringify(card),
     });
     if (!r.ok) throw new Error(`飞书推送失败 ${r.status}: ${await r.text()}`);
-    console.log('[notify] 飞书推送成功');
-    return;
+    sent++;
+  }
+  // 末尾补一张「批量操作」卡（一键发布中塞+生活 / 全部跳过）
+  const batchCard = {
+    msg_type: 'interactive',
+    card: {
+      config: { wide_screen_mode: true },
+      header: { title: { tag: 'plain_text', content: '中塞通 · 一键批量操作' }, template: 'blue' },
+      elements: [{ tag: 'markdown', content: buildBatchMarkdown(items) }],
+    },
+  };
+  const rb = await fetch(hook, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(batchCard),
+  });
+  if (!rb.ok) throw new Error(`飞书批量卡推送失败 ${rb.status}: ${await rb.text()}`);
+  console.log(`[notify] 飞书推送成功（${sent} 张明细卡 + 1 张批量卡，共 ${total} 条）`);
+}
+
+async function send(channel, items) {
+  if (channel === 'feishu') {
+    return sendFeishu(items);
   }
 
   if (channel === 'whatsapp') {
@@ -174,7 +210,9 @@ async function send(channel, text, items) {
 
   // none / 未知：仅打印，方便本地联调
   console.log('\n========== [notify] channel=none，待审推送预览 ==========\n');
-  console.log(text);
+  console.log(buildMarkdown(items));
+  console.log('\n----------------------------------------------------------\n');
+  console.log(buildBatchMarkdown(items));
   console.log('\n==========================================================\n');
 }
 
@@ -188,8 +226,7 @@ async function main() {
     console.log('[notify] 无待审内容，跳过推送');
     return;
   }
-  const text = buildMarkdown(items);
-  await send(CHANNEL, text, items);
+  await send(CHANNEL, items);
 }
 
 main().catch((e) => {
