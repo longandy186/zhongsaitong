@@ -86,46 +86,86 @@ export async function onRequestGet({ request, env }) {
   const expected = await hmacHex(secret, `${action}:${payload}`);
   if (expected !== sig) return deny();
 
-  // 2) 逐条更新 GitHub 文件
+  // 2) 逐条处理：从 drafts 草稿读取 → 写入 main → 清理草稿
+  //    草稿分支(drafts)只存放「待审核」新闻；审核通过才合入 main 并触发部署。
   const results = [];
+  const branch = 'main';
+  const draftBranch = 'drafts';
   for (const tid of targets) {
-    // 文件名含中文，必须 encodeURIComponent（路径分隔符 / 不受影响）
-    const filePath = `src/content/items/${encodeURIComponent(tid)}.md`;
-    const api = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+    const fileName = `${encodeURIComponent(tid)}.md`;
+    const contentPath = `src/content/items/${fileName}`;
+    const draftApi = `https://api.github.com/repos/${repo}/contents/${contentPath}?ref=${draftBranch}`;
+    const mainApi = `https://api.github.com/repos/${repo}/contents/${contentPath}`;
     const headers = {
       Authorization: `Bearer ${token}`,
       'User-Agent': 'zst-approve',
       Accept: 'application/vnd.github+json',
     };
-    let getRes;
+
+    // 2.1 优先从 drafts 草稿读取；草稿不存在时回退 main（兼容历史遗留 pending）
+    let sourceApi = draftApi;
+    let sourceSha = null;
+    let content = null;
     try {
-      getRes = await fetch(api, { headers });
-    } catch {
-      results.push(`${tid}: 网络错误`);
+      const r = await fetch(draftApi, { headers });
+      if (r.ok) {
+        const d = await r.json();
+        sourceSha = d.sha;
+        content = b64ToString(d.content);
+      }
+    } catch { /* ignore */ }
+    if (content === null) {
+      try {
+        const r = await fetch(mainApi, { headers });
+        if (r.ok) { const d = await r.json(); sourceSha = d.sha; content = b64ToString(d.content); sourceApi = mainApi; }
+      } catch { /* ignore */ }
+    }
+    if (content === null) {
+      results.push(`${tid}: 草稿与 main 均无此文件`);
       continue;
     }
-    if (!getRes.ok) {
-      results.push(`${tid}: 获取失败(${getRes.status})`);
-      continue;
-    }
-    const data = await getRes.json();
-    const content = b64ToString(data.content);
+
     const newStatus = mode === 'publish' ? 'active' : 'rejected';
     const newContent = content.replace(/^status:\s*pending\s*$/m, `status: ${newStatus}`);
     if (newContent === content) {
       results.push(`${tid}: 状态未变(已处理或非 pending)`);
       continue;
     }
-    const putRes = await fetch(api, {
+
+    // 2.2 写入 main（已存在则更新，不存在则创建）→ 触发部署
+    let mainSha = null;
+    try {
+      const r = await fetch(mainApi, { headers });
+      if (r.ok) mainSha = (await r.json()).sha;
+    } catch { /* ignore */ }
+    const putRes = await fetch(mainApi, {
       method: 'PUT',
       headers: { ...headers, 'content-type': 'application/json' },
       body: JSON.stringify({
         message: `review: ${mode} ${tid}`,
         content: stringToB64(newContent),
-        sha: data.sha,
+        branch,
+        ...(mainSha ? { sha: mainSha } : {}),
       }),
     });
-    results.push(`${tid}: ${putRes.ok ? '✅' + (mode === 'publish' ? '已发布' : '已跳过') : '失败'}`);
+    if (!putRes.ok) {
+      results.push(`${tid}: 写入 main 失败(${putRes.status})`);
+      continue;
+    }
+
+    // 2.3 清理草稿（仅当来源是草稿时）
+    if (sourceApi === draftApi && sourceSha) {
+      await fetch(draftApi, {
+        method: 'DELETE',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          message: `review: 移除草稿 ${tid}`,
+          branch: draftBranch,
+          sha: sourceSha,
+        }),
+      });
+    }
+    results.push(`${tid}: ${mode === 'publish' ? '✅ 已发布' : '⏭ 已跳过'}`);
   }
 
   const verb = mode === 'publish' ? '发布' : '跳过';
