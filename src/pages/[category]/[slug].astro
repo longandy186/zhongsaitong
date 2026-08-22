@@ -1,0 +1,165 @@
+---
+import Base from '../../layouts/Base.astro';
+import Header from '../../components/Header.astro';
+import { getCollection } from 'astro:content';
+import { TYPE_STYLE, CATEGORY_LABEL, NEWS_KINDS, SOCIAL } from '../../data/site';
+import { itemSlug } from '../../lib/itemUrl';
+import { cleanSummary } from '../../lib/summary';
+import ArticleSchema from '../../components/ArticleSchema.astro';
+
+export async function getStaticPaths() {
+  const items = await getCollection('items');
+  return items.map((item) => ({
+    params: { category: item.data.category, slug: itemSlug(item.id) },
+    props: { item },
+  }));
+}
+
+const { item } = Astro.props;
+const { data } = item;
+const { Content } = await item.render();
+const desc = cleanSummary(item, 120);
+const style = TYPE_STYLE[data.category];
+const categoryLabel = CATEGORY_LABEL[data.category];
+const kindLabel = NEWS_KINDS.find((k) => k.key === data.kind)?.label;
+
+function formatDate(d: Date): string {
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+---
+
+<Base title={`${data.title} · 中塞通`} description={desc}>
+  <ArticleSchema item={item} />
+  <Header active={data.category === 'news' ? 'news' : data.category} />
+
+  <!-- 面包屑 -->
+  <nav class="breadcrumb" aria-label="位置">
+    <a href="/">首页</a>
+    <span class="sep">/</span>
+    <a href={data.category === 'news' ? '/news/' : `/${data.category}/`}>{categoryLabel}</a>
+    <span class="sep">/</span>
+    <span class="current">详情</span>
+  </nav>
+
+  <!-- 文章卡 -->
+  <article class="post-card">
+    <div class="post-meta">
+      <span class="meta-tag" style={`background:${style.color}`}>{style.label}</span>
+      <span class="meta-cat">{categoryLabel}</span>
+      {data.category === 'news' && kindLabel && kindLabel !== '中塞要闻' && (
+        <span class="meta-chip">{kindLabel}</span>
+      )}
+      <span class="spacer"></span>
+      <span class="meta-time">{formatDate(data.date)}</span>
+    </div>
+
+    <h1 class="post-title">{data.title}</h1>
+
+    {desc && <p class="post-summary">{desc}</p>}
+
+    {data.price && <div class="post-price">{data.price}</div>}
+    {data.location && <div class="post-location">📍 {data.location}</div>}
+
+    {data.images.length > 0 && (
+      <div class="post-gallery">
+        {data.images.map((img, i) => (
+          <img src={img} alt={`${data.title} ${i + 1}`} loading="lazy" />
+        ))}
+      </div>
+    )}
+
+    <div class="post-content">
+      <Content />
+    </div>
+
+    <div class="post-footer">
+      {data.contact && (
+        <div class="post-contact">
+          联系方式：<span class="contact-val">{data.contact}</span>
+        </div>
+      )}
+      <div class="post-source">
+        {data.source ? `来源：${data.source} · ` : ''}信息仅供参考，交易请自行核实风险
+      </div>
+    </div>
+  </article>
+
+  <!-- 公众号卡 -->
+  <div class="qr-card">
+    <img src={SOCIAL.wechatQr} alt="公众号二维码" />
+    <div class="qr-info">
+      <div class="qr-title">关注 {SOCIAL.wechatName}</div>
+      <div class="qr-desc">第一时间获取塞尔维亚华人资讯</div>
+    </div>
+    <a href={SOCIAL.channelUrl} class="qr-btn" data-mp>视频号</a>
+  </div>
+
+  <a href="/" class="back-link">← 返回首页</a>
+</Base>
+
+<style>
+  .breadcrumb { display: flex; align-items: center; gap: 6px; padding: 14px 16px 0; font-size: 12px; color: var(--ink-3); }
+  @media (min-width: 1024px) { .breadcrumb { padding: 14px 0 0; } }
+  .breadcrumb a { color: var(--ink-3); }
+  .breadcrumb a:hover { color: var(--wine); }
+  .breadcrumb .sep { color: var(--ink-4); }
+  .breadcrumb .current { color: var(--ink-2); }
+
+  .post-card { margin: 12px 16px 0; background: #fff; border-radius: var(--r-lg); padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  @media (min-width: 1024px) { .post-card { margin: 12px 0 0; padding: 28px; gap: 16px; } }
+
+  .post-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .meta-tag { color: #fff; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 4px; }
+  .meta-cat { font-size: 13px; color: var(--ink-2); font-weight: 500; }
+  .meta-chip { font-size: 11px; background: #FAF8F5; color: var(--ink-2); border-radius: 4px; padding: 3px 8px; }
+  .spacer { flex: 1; }
+  .meta-time { font-size: 12px; color: var(--ink-3); }
+
+  .post-title { font-size: 22px; font-weight: 800; line-height: 1.35; color: var(--ink); letter-spacing: -0.5px; }
+  @media (min-width: 1024px) { .post-title { font-size: 28px; } }
+  .post-summary {
+    font-size: 14px; color: var(--ink-2); line-height: 1.8;
+    background: var(--pink-soft); border-left: 3px solid var(--wine);
+    padding: 10px 14px; border-radius: 0 10px 10px 0;
+  }
+
+  .post-price { font-size: 22px; font-weight: 800; color: var(--wine); }
+  .post-location { font-size: 13px; color: var(--ink-2); }
+
+  .post-gallery { display: flex; gap: 8px; overflow-x: auto; margin: 4px -4px 0; padding: 0 4px 6px; scrollbar-width: none; }
+  .post-gallery::-webkit-scrollbar { display: none; }
+  .post-gallery img { width: 220px; height: 160px; object-fit: cover; border-radius: 10px; flex-shrink: 0; }
+
+  .post-content { font-size: 15px; line-height: 1.85; color: var(--ink); }
+  .post-content :global(p) { margin-bottom: 12px; }
+  .post-content :global(img) { border-radius: 10px; margin: 8px 0; max-width: 100%; }
+
+  .post-footer { margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 6px; }
+  .post-contact { font-size: 14px; color: var(--ink-2); }
+  .contact-val { color: var(--t-blue); font-weight: 600; }
+  .post-source { font-size: 12px; color: var(--ink-4); }
+
+  .qr-card { margin: 14px 16px 0; background: var(--wine-dark); border-radius: var(--r-lg); padding: 14px; display: flex; align-items: center; gap: 12px; color: #fff; }
+  @media (min-width: 1024px) { .qr-card { margin: 14px 0 0; padding: 16px 18px; } }
+  .qr-card img { width: 48px; height: 48px; border-radius: 8px; background: #fff; padding: 3px; flex-shrink: 0; }
+  .qr-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .qr-title { font-size: 14px; font-weight: 700; }
+  .qr-desc { font-size: 11px; color: #C9B8BF; }
+  .qr-btn { flex-shrink: 0; background: var(--pink); color: #fff; border-radius: 14px; padding: 6px 14px; font-size: 12px; font-weight: 600; }
+
+  .back-link { display: block; text-align: center; padding: 18px 16px 32px; font-size: 14px; color: var(--ink-2); }
+  @media (min-width: 1024px) { .back-link { padding: 18px 0 40px; } }
+  .back-link:hover { color: var(--wine); }
+</style>
+
+<script>
+  document.querySelectorAll('[data-mp]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      const href = (el as HTMLAnchorElement).getAttribute('href');
+      if (!href || href === '#') {
+        e.preventDefault();
+        alert('视频号链接待配置');
+      }
+    });
+  });
+</script>

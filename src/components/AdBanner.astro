@@ -1,25 +1,150 @@
 ---
 import { BANNERS } from '../data/ads';
+const slides = BANNERS;
 ---
 
-<div
-  style="display:flex; overflow-x:auto; scroll-snap-type:x mandatory; gap:10px; margin:10px 0; -webkit-overflow-scrolling:touch; scrollbar-width:none; border-radius:var(--radius);"
->
-  {
-    BANNERS.map((b) => (
-      <a
-        href={b.url}
-        style="scroll-snap-align:start; flex-shrink:0; width:100%; position:relative; border-radius:var(--radius); overflow:hidden; display:block;"
-      >
-        <img src={b.image} alt={b.title} style="width:100%; aspect-ratio:2/1; object-fit:cover; display:block;" />
-        <div style="position:absolute; left:12px; bottom:12px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.4);">
-          <div style="font-size:15px; font-weight:700;">{b.title}</div>
-          <div style="font-size:12px; opacity:0.92;">{b.subtitle}</div>
+<!-- ===== Hero (Mobile) ===== -->
+<section class="hero-mobile" aria-label="首屏轮播">
+  <div class="carousel" data-carousel>
+    <div class="carousel-track">
+      {slides.map((s) => (
+        <div class="carousel-slide">
+          <a href={s.url} class="hero-card">
+            <div class="hero-img">
+              <img src={s.image} alt={s.title} loading="eager" />
+            </div>
+            <div class="hero-caption">
+              <h1>{s.title}</h1>
+              <p>{s.subtitle}</p>
+            </div>
+          </a>
         </div>
-      </a>
-    ))
+      ))}
+    </div>
+    <div class="dots" aria-label="轮播指示器">
+      {slides.map((_, i) => (
+        <button class:list={[i === 0 && 'active']} aria-label={`第 ${i + 1} 张`}></button>
+      ))}
+    </div>
+  </div>
+</section>
+
+<!-- ===== Hero (Desktop) ===== -->
+<section class="hero-desktop" aria-label="桌面端首屏轮播">
+  <div class="carousel" data-carousel>
+    <div class="carousel-track">
+      {slides.map((s) => (
+        <div class="carousel-slide">
+          <a href={s.url} class="hero-d-card">
+            <div class="hero-d-img">
+              <img src={s.image} alt={s.title} loading="eager" />
+            </div>
+            <div class="hero-d-body">
+              <span class="hero-d-tag">{s.title}</span>
+              <h1>{s.title}</h1>
+              <p>{s.subtitle}</p>
+              <div class="hero-d-btns">
+                <span class="btn-hero">立即查看</span>
+              </div>
+            </div>
+          </a>
+        </div>
+      ))}
+    </div>
+    <div class="dots" aria-label="轮播指示器">
+      {slides.map((_, i) => (
+        <button class:list={[i === 0 && 'active']} aria-label={`第 ${i + 1} 张`}></button>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  (function () {
+    function initCarousel(root: HTMLElement) {
+      const track = root.querySelector('[class="carousel-track"]') as HTMLElement;
+      const dots = root.querySelectorAll('.dots button');
+      const slides = root.querySelectorAll('.carousel-slide');
+      if (!track || !slides.length) return;
+      let idx = 0;
+      let timer: number | null = null;
+      const INTERVAL = 5000;
+      function goTo(i: number, instant?: boolean) {
+        idx = (i + slides.length) % slides.length;
+        const offset = -(idx * (100 / slides.length));
+        if (instant) {
+          track.style.transition = 'none';
+          track.style.transform = `translateX(${offset}%)`;
+          void track.offsetWidth;
+          track.style.transition = '';
+        } else {
+          track.style.transform = `translateX(${offset}%)`;
+        }
+        dots.forEach((d, di) => d.classList.toggle('active', di === idx));
+      }
+      function next() { goTo(idx + 1); }
+      function start() { stop(); timer = window.setInterval(next, INTERVAL); }
+      function stop() { if (timer != null) window.clearInterval(timer); timer = null; }
+      dots.forEach((d, di) =>
+        d.addEventListener('click', () => { goTo(di); start(); })
+      );
+      root.addEventListener('mouseenter', stop);
+      root.addEventListener('mouseleave', start);
+      let startX = 0, startY = 0;
+      root.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        stop();
+      }, { passive: true });
+      root.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = e.changedTouches[0].clientY - startY;
+        if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+          if (dx < 0) next(); else goTo(idx - 1);
+        }
+        start();
+      }, { passive: true });
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) stop(); else start();
+      });
+      goTo(0, true);
+      start();
+    }
+    document.querySelectorAll('[data-carousel]').forEach((el) => initCarousel(el as HTMLElement));
+  })();
+</script>
+
+<style>
+  .hero-mobile { padding: 12px 16px 4px; }
+  .carousel { position: relative; overflow: hidden; }
+  .carousel-track { display: flex; width: 300%; transition: transform .5s cubic-bezier(.4,0,.2,1); will-change: transform; }
+  .carousel-slide { width: 33.33333%; flex-shrink: 0; }
+  .hero-card { background: #fff; border-radius: var(--r-lg); overflow: hidden; display: block; }
+  .hero-img { width: 100%; aspect-ratio: 16/9; position: relative; overflow: hidden; background: var(--wine-dark); }
+  .hero-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .hero-caption { background: var(--wine-dark); color: #fff; padding: 12px 14px; }
+  .hero-caption h1 { font-size: 17px; font-weight: 700; line-height: 1.35; }
+  .hero-caption p { font-size: 12px; color: #D8C9CF; margin-top: 2px; }
+  .dots { display: flex; gap: 6px; justify-content: center; padding: 8px 0 0; }
+  .dots button { width: 6px; height: 6px; border-radius: 3px; background: #D5D2CD; padding: 0; border: none; cursor: pointer; transition: width .3s, background .3s; }
+  .dots button.active { width: 18px; background: var(--wine); }
+
+  .hero-desktop { display: none; }
+  @media (min-width: 1024px) {
+    .hero-mobile { display: none; }
+    .hero-desktop { display: block; padding: 24px 40px 8px; max-width: 1280px; margin: 0 auto; }
+    .hero-d-card {
+      display: flex; background: #fff; border-radius: var(--r-xl);
+      overflow: hidden; min-height: 420px;
+    }
+    .hero-d-img { width: 760px; min-height: 420px; position: relative; overflow: hidden; background: var(--wine-dark); flex-shrink: 0; }
+    .hero-d-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .hero-d-body { flex: 1; background: var(--wine-dark); color: #fff; padding: 36px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+    .hero-d-tag { display: inline-block; align-self: flex-start; background: var(--wine); color: #fff; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 4px; }
+    .hero-d-body h1 { font-size: 28px; font-weight: 700; line-height: 1.35; }
+    .hero-d-body p { font-size: 14px; color: #C9B8BF; }
+    .hero-d-btns { display: flex; gap: 10px; align-items: center; }
+    .btn-hero { background: var(--pink); color: #fff; border-radius: 24px; padding: 12px 22px; font-size: 14px; font-weight: 600; transition: all .2s; }
+    .btn-hero:hover { background: #E83A5A; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(255,77,109,.35); }
   }
-  <style>
-    div::-webkit-scrollbar { display: none; }
-  </style>
-</div>
+</style>

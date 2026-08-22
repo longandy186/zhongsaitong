@@ -1,0 +1,124 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import { SITE, SOCIAL } from '../data/site';
+
+const orgSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: SITE.name,
+  alternateName: 'ZhongSaiTong',
+  description: SITE.description,
+  url: `${SITE.url}/`,
+  logo: `${SITE.url}/favicon.svg`,
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: '贝尔格莱德',
+    addressCountry: 'RS',
+  },
+  sameAs: [SOCIAL.channelUrl !== '#' ? SOCIAL.channelUrl : undefined].filter(Boolean),
+};
+
+const sections = [
+  {
+    title: '我们是谁',
+    body: '中塞通（ZhongSaiTong）是面向塞尔维亚华人的一站式信息平台。为在塞华人和准备赴塞的朋友，提供每日要闻、使馆/商会动态、租房、招聘、二手买卖、生活指南与供求对接，并配套汇率换算、天气、时差、常用语速查等实用工具。',
+  },
+  {
+    title: '覆盖板块',
+    items: [
+      ['每日要闻', '使馆/商会动态、中塞要闻，来源标注'],
+      ['租房', '本地真实房源'],
+      ['招聘', '中企与本地工作机会'],
+      ['买卖 / 供求', '二手转让、货源对接'],
+      ['生活指南', '签证、居留、驾照、社保等'],
+      ['工具', '汇率换算、天气、时差、常用语、扫价签'],
+    ],
+  },
+  {
+    title: '信息与准确性',
+    body: '新闻信息来源于使馆公告、官方媒体与本地媒体，每条均标注来源；汇率与天气每日 8:00 自动刷新。联系方式与电话索引以官方最新公布为准。',
+  },
+  {
+    title: '联系我们',
+    items: [
+      ['公众号 / 视频号', SOCIAL.wechatName],
+      ['邮箱', SITE.email],
+      ['发布信息', '/publish/'],
+      ['广告合作', '/advertise/'],
+    ],
+  },
+  {
+    title: '权威信息来源',
+    links: [
+      ['中国驻塞尔维亚大使馆', 'https://belgrade.china-embassy.gov.cn'],
+      ['塞尔维亚商业注册局 APR', 'https://www.apr.gov.rs'],
+      ['贝尔格莱德尼古拉·特斯拉机场', 'https://www.beg.aero'],
+      ['塞尔维亚铁路 SrbVoz', 'https://www.srbvoz.rs'],
+      ['在塞常用电话与网址索引', '/links/'],
+    ],
+  },
+];
+---
+
+<Base title="关于中塞通 · 塞尔维亚华人信息平台">
+  <Header active="about" />
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(orgSchema)} />
+
+  <section class="page-hero">
+    <h1>关于中塞通</h1>
+    <p>让每一个在塞华人的"家"更近。English：ZhongSaiTong — an all-in-one information platform for Chinese community in Serbia.</p>
+  </section>
+
+  <div class="about-grid">
+    {
+      sections.map((s) => (
+        <section class="about-card">
+          <h2 class="about-title">{s.title}</h2>
+          {s.body && <p class="about-body">{s.body}</p>}
+          {s.items && (
+            <ul class="about-list">
+              {s.items.map((it) => (
+                <li>{it[1] && typeof it[1] === 'string' && (it[1].startsWith('/') || it[1].startsWith('http')) ? (
+                  <span class="li-k">{it[0]}：</span><a href={it[1]}>{it[1]}</a>
+                ) : (
+                  <span><span class="li-k">{it[0]}</span>{it[1] ? `：${it[1]}` : ''}</span>
+                )}</li>
+              ))}
+            </ul>
+          )}
+          {s.links && (
+            <ul class="about-list about-links">
+              {s.links.map((l) => (
+                <li><a href={l[1]} target={l[1].startsWith('http') ? '_blank' : undefined} rel={l[1].startsWith('http') ? 'noopener' : undefined}>{l[0]} →</a></li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ))
+    }
+  </div>
+
+  <p class="about-foot">© {new Date().getFullYear()} {SITE.name} · {SITE.tagline}</p>
+</Base>
+
+<style>
+  .page-hero { padding: 24px 16px 16px; max-width: 960px; margin: 0 auto; }
+  @media (min-width: 1024px) { .page-hero { padding: 36px 0 20px; } }
+  .page-hero h1 { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
+  .page-hero p { font-size: 13px; color: var(--ink-2); margin-top: 8px; line-height: 1.7; }
+
+  .about-grid { display: grid; grid-template-columns: 1fr; gap: 12px; max-width: 960px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 768px) { .about-grid { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 1024px) { .about-grid { padding: 0; } }
+  .about-card { background: #fff; border-radius: var(--r-lg); padding: 18px; }
+  .about-title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .about-title::before { content: ''; width: 4px; height: 15px; background: var(--wine); border-radius: 2px; }
+  .about-body { font-size: 13px; color: var(--ink-2); line-height: 1.8; }
+  .about-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .about-list li { font-size: 13px; color: var(--ink-2); line-height: 1.7; }
+  .li-k { font-weight: 600; color: var(--ink); }
+  .about-list a { color: var(--wine); font-weight: 600; }
+  .about-links a:hover { text-decoration: underline; }
+  .about-foot { text-align: center; font-size: 11px; color: var(--ink-3); padding: 24px 16px 40px; }
+</style>

@@ -2,66 +2,141 @@
 import Base from '../layouts/Base.astro';
 import Header from '../components/Header.astro';
 import { SITE, FORM_ENDPOINT } from '../data/site';
+
+const plans = [
+  {
+    no: '01',
+    title: '首页轮播 Banner',
+    desc: '首页顶部大图轮播，全站最高曝光位置。适合品牌活动、新店开业、大型招商。',
+    tag: '高曝光',
+    color: 'var(--pink)',
+  },
+  {
+    no: '02',
+    title: '信息流广告卡片',
+    desc: '按频率插入首页信息流，与正常内容同形式，自然融入不打扰。',
+    tag: '自然融入',
+    color: 'var(--t-wine)',
+  },
+  {
+    no: '03',
+    title: '信息置顶 / 推广标记',
+    desc: '发布的信息可置顶 + 带"推广"标识，在分类列表里获得优先曝光。',
+    tag: '优先曝光',
+    color: 'var(--t-orange)',
+  },
+  {
+    no: '04',
+    title: '公众号 / 视频号合作',
+    desc: '软文、视频口播、联合活动。公众号每日推送 + 视频号内容联动。',
+    tag: '深度合作',
+    color: 'var(--t-purple)',
+  },
+];
 ---
 
 <Base title="广告合作 · 中塞通">
   <Header />
-  <div class="section-title">广告合作</div>
 
-  <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 16px; margin-bottom:14px; font-size:14px; color:var(--text-secondary);">
-    中塞通面向全部在塞华人，覆盖 <span style="color:var(--red);font-weight:600;">70号商城华商、中资企业员工、留学生、新移民</span>。
-    提供以下推广方式，帮你的商家/品牌精准触达目标人群。
+  <section class="page-hero">
+    <h1>广告合作</h1>
+    <p>中塞通面向全部在塞华人，覆盖 <strong>70号商城华商、中资企业员工、留学生、新移民</strong>。</p>
+    <p>提供以下推广方式，帮你的商家 / 品牌精准触达目标人群。</p>
+  </section>
+
+  <div class="plans">
+    {plans.map((p) => (
+      <div class="plan-card">
+        <div class="plan-no">{p.no}</div>
+        <div class="plan-body">
+          <span class="plan-tag" style={`background:${p.color}`}>{p.tag}</span>
+          <h3 class="plan-title">{p.title}</h3>
+          <p class="plan-desc">{p.desc}</p>
+        </div>
+      </div>
+    ))}
   </div>
 
-  <div style="display:flex; flex-direction:column; gap:10px;">
-    <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px;">
-      <div style="font-size:15px; font-weight:600; margin-bottom:6px;">① 首页轮播 Banner</div>
-      <div style="font-size:13px; color:var(--text-secondary);">
-        首页顶部大图轮播，全站最高曝光位置。适合品牌活动、新店开业、大型招商。
-      </div>
-    </div>
-    <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px;">
-      <div style="font-size:15px; font-weight:600; margin-bottom:6px;">② 信息流广告卡片</div>
-      <div style="font-size:13px; color:var(--text-secondary);">
-        按频率插入首页信息流，与正常内容同形式，自然融入不打扰。
-      </div>
-    </div>
-    <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px;">
-      <div style="font-size:15px; font-weight:600; margin-bottom:6px;">③ 信息置顶 / 推广标记</div>
-      <div style="font-size:13px; color:var(--text-secondary);">
-        发布的信息可置顶 + 带"推广"标识，在分类列表里获得优先曝光。
-      </div>
-    </div>
-    <div style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px;">
-      <div style="font-size:15px; font-weight:600; margin-bottom:6px;">④ 公众号 / 视频号合作</div>
-      <div style="font-size:13px; color:var(--text-secondary);">
-        软文、视频口播、联合活动。公众号每日推送 + 视频号内容联动。
-      </div>
-    </div>
-  </div>
+  <section class="form-section">
+    <h2>聊聊你的需求</h2>
+    <p class="form-sub">填写下方表单，48 小时内由商务团队对接。</p>
+    <form
+      action={FORM_ENDPOINT}
+      method="POST"
+      class="form-card"
+    >
+      <input type="hidden" name="_subject" value="中塞通广告合作咨询" />
+      <input type="hidden" name="_template" value="table" />
+      <input type="hidden" name="_captcha" value="false" />
 
-  <form
-    action={FORM_ENDPOINT}
-    method="POST"
-    style="background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:18px 16px; margin-top:16px; display:flex; flex-direction:column; gap:14px;"
-  >
-    <input type="hidden" name="_subject" value="中塞通广告合作咨询" />
-    <input type="hidden" name="_template" value="table" />
-    <input type="hidden" name="_captcha" value="false" />
-    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
-      你的称呼 / 商家名
-      <input name="name" type="text" required style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px;" />
-    </label>
-    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
-      联系方式
-      <input name="contact" type="text" required placeholder="微信 / 电话" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px;" />
-    </label>
-    <label style="display:flex; flex-direction:column; gap:6px; font-size:14px;">
-      想了解哪种推广？
-      <textarea name="message" rows="3" style="padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:15px; resize:vertical;"></textarea>
-    </label>
-    <button type="submit" class="btn-primary" style="padding:11px; font-size:15px; border-radius:10px;">
-      提交咨询
-    </button>
-  </form>
+      <div class="field-row">
+        <label class="field">
+          <span class="field-label">你的称呼 / 商家名 <em>*</em></span>
+          <input name="name" type="text" required class="input" />
+        </label>
+        <label class="field">
+          <span class="field-label">联系方式 <em>*</em></span>
+          <input name="contact" type="text" required placeholder="微信 / 电话" class="input" />
+        </label>
+      </div>
+      <label class="field">
+        <span class="field-label">想了解哪种推广？</span>
+        <textarea name="message" rows="4" placeholder="简单描述你的推广需求、预算区间等" class="input"></textarea>
+      </label>
+      <button type="submit" class="btn-pink submit-btn">
+        提交咨询
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </form>
+  </section>
 </Base>
+
+<style>
+  .page-hero { padding: 24px 16px 18px; max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; }
+  @media (min-width: 1024px) { .page-hero { padding: 36px 0 24px; } }
+  .page-hero h1 { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
+  .page-hero p { font-size: 14px; color: var(--ink-2); line-height: 1.7; }
+  .page-hero strong { color: var(--wine); font-weight: 600; }
+
+  .plans { display: grid; grid-template-columns: 1fr; gap: 10px; padding: 0 16px; max-width: 1280px; margin: 0 auto; }
+  @media (min-width: 768px) { .plans { grid-template-columns: 1fr 1fr; gap: 14px; padding: 0 40px; } }
+  @media (min-width: 1024px) { .plans { grid-template-columns: repeat(4, 1fr); padding: 0 40px; } }
+  .plan-card {
+    background: #fff; border-radius: var(--r-lg); padding: 18px;
+    display: flex; gap: 14px; align-items: flex-start;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .plan-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .plan-no { font-size: 28px; font-weight: 800; color: var(--pink); line-height: 1; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .plan-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .plan-tag { align-self: flex-start; color: #fff; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 4px; }
+  .plan-title { font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.4; }
+  .plan-desc { font-size: 12px; color: var(--ink-2); line-height: 1.6; }
+
+  .form-section { padding: 36px 16px 24px; max-width: 720px; margin: 0 auto; }
+  @media (min-width: 1024px) { .form-section { padding: 48px 0 32px; } }
+  .form-section h2 { font-size: 22px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
+  .form-sub { font-size: 13px; color: var(--ink-2); margin-bottom: 18px; }
+
+  .form-card { background: #fff; border-radius: var(--r-lg); padding: 20px 16px; display: flex; flex-direction: column; gap: 14px; }
+  @media (min-width: 1024px) { .form-card { padding: 28px; } }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 480px) { .field-row { grid-template-columns: 1fr; } }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field-label { font-size: 13px; color: var(--ink-2); font-weight: 600; }
+  .field-label em { color: var(--pink); font-style: normal; margin-left: 2px; }
+  .input {
+    padding: 11px 14px; border: 1px solid var(--line); border-radius: 10px;
+    font: inherit; background: #fff; color: var(--ink);
+    transition: border-color .2s, box-shadow .2s;
+    width: 100%;
+  }
+  .input:focus { outline: none; border-color: var(--wine); box-shadow: 0 0 0 3px var(--pink-soft); }
+  textarea.input { resize: vertical; min-height: 90px; line-height: 1.6; }
+  .btn-pink { background: var(--pink); color: #fff; border: 0; cursor: pointer; transition: background .2s, transform .15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn-pink:hover { background: #E83A5A; }
+  .btn-pink:active { transform: scale(0.97); }
+  .submit-btn { padding: 13px; border-radius: 12px; font-size: 15px; font-weight: 700; margin-top: 6px; }
+</style>

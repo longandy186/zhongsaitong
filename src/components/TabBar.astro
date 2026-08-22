@@ -1,34 +1,35 @@
 ---
 import { CATEGORIES } from '../data/site';
 interface Props {
-  active: string;
+  active?: string;
 }
-const { active } = Astro.props;
+const { active = 'all' } = Astro.props;
 ---
 
-<nav
-  aria-label="分类"
-  style="display:flex; gap:4px; overflow-x:auto; padding:10px 0; -webkit-overflow-scrolling:touch; scrollbar-width:none;"
->
-  {
-    CATEGORIES.map((c) => {
-      const isActive = active === c.key;
-      const href = c.key === 'all' ? '/' : `/${c.key}/`;
-      return (
-        <a
-          href={href}
-          style={`flex-shrink:0; padding:6px 16px; border-radius:18px; font-size:14px; transition:all .15s; ${
-            isActive
-              ? 'background:var(--red); color:#fff; font-weight:500;'
-              : 'background:var(--card); color:var(--text-secondary); border:1px solid var(--border);'
-          }`}
-        >
-          {c.label}
-        </a>
-      );
-    })
-  }
-  <style>
-    nav::-webkit-scrollbar { display: none; }
-  </style>
+<nav class="cats" aria-label="分类">
+  {CATEGORIES.map((c) => (
+    <a
+      class:list={['cat', active === c.key && 'active']}
+      href={c.key === 'all' ? '/' : `/${c.key}/`}
+    >
+      {c.label}
+    </a>
+  ))}
 </nav>
+
+<style>
+  .cats { display: flex; gap: 8px; padding: 14px 16px 4px; overflow-x: auto; scrollbar-width: none; }
+  .cats::-webkit-scrollbar { display: none; }
+  @media (min-width: 1024px) { .cats { padding: 0; gap: 10px; flex-wrap: wrap; overflow: visible; } }
+  .cat {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 7px 14px; border-radius: 15px;
+    font-size: 12px; white-space: nowrap;
+    background: #fff; color: var(--ink-2);
+    border: 1px solid var(--line);
+    transition: all .2s;
+  }
+  .cat:hover { color: var(--wine); border-color: var(--wine); }
+  .cat.active { background: var(--wine); color: #fff; border-color: var(--wine); font-weight: 600; }
+  @media (min-width: 1024px) { .cat { padding: 9px 18px; font-size: 13px; border-radius: 17px; } }
+</style>

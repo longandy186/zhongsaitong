@@ -3,8 +3,16 @@ import { SITE } from '../data/site';
 interface Props {
   title?: string;
   description?: string;
+  canonical?: string; // 覆盖默认 canonical（用于旧 /post/ 页指向新 URL）
 }
-const { title = `${SITE.name} · ${SITE.tagline}`, description = SITE.description } = Astro.props;
+const {
+  title = `${SITE.name} · ${SITE.tagline}`,
+  description = SITE.description,
+  canonical: canonicalProp,
+} = Astro.props;
+const canonical = canonicalProp
+  ? new URL(canonicalProp, SITE.url).href
+  : new URL(Astro.url.pathname, SITE.url).href;
 ---
 
 <!DOCTYPE html>
@@ -14,33 +22,77 @@ const { title = `${SITE.name} · ${SITE.tagline}`, description = SITE.descriptio
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
-    <meta name="theme-color" content="#1A1A2E" />
+    <meta name="theme-color" content="#7B1E3B" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content="中塞通" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
+    <link rel="canonical" href={canonical} />
+    <script type="application/ld+json" is:inline>
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "中塞通",
+        "alternateName": "ZhongSaiTong",
+        "description": "塞尔维亚华人信息平台，提供每日要闻、使馆/商会动态、房源、招聘、生活指南与汇率天气工具",
+        "url": "https://zhongsaitong.pages.dev/",
+        "sameAs": []
+      }
+    </script>
+    <script type="application/ld+json" is:inline>
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "中塞通",
+        "url": "https://zhongsaitong.pages.dev/",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://zhongsaitong.pages.dev/search?q={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      }
+    </script>
     <style is:global>
       :root {
-        --ink: #1a1a2e;
-        --crimson: #e94560;
-        --crimson-dark: #c23648;
-        --paper: #f8f9fa;
-        --charcoal: #2d3436;
-        --ash: #636e72;
-        --mist: #dfe6e9;
-        --amber: #fdcb6e;
-        --green: #00b894;
-        --blue: #0984e3;
+        /* v2 品牌色（酒红 · 塞尔维亚元素） */
+        --wine: #7B1E3B;
+        --wine-deep: #5C1429;
+        --wine-dark: #2A1620;
+        --pink: #FF4D6D;
+        --pink-soft: #F3E8EA;
+        /* 标签 5 色 */
+        --t-wine: #7B1E3B;
+        --t-blue: #2E86C1;
+        --t-green: #27AE60;
+        --t-orange: #EA580C;
+        --t-purple: #8E44AD;
+        /* 圆角 / 阴影 */
+        --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px;
+        --shadow-sm: 0 1px 2px rgba(0,0,0,.04);
+        --shadow-md: 0 4px 12px rgba(0,0,0,.06);
+        --shadow-lg: 0 10px 24px rgba(0,0,0,.08);
+        --shadow-fab: 0 6px 16px rgba(0,0,0,.22);
         /* 兼容变量（组件引用名不变，只换值） */
-        --red: #e94560;
-        --red-dark: #c23648;
-        --red-light: rgba(233, 69, 96, 0.1);
-        --blue: #0984e3;
-        --text: #2d3436;
-        --text-secondary: #636e72;
-        --text-tertiary: #8a9499;
-        --bg: #f8f9fa;
-        --card: #ffffff;
-        --border: #dfe6e9;
-        --radius: 20px;
+        --ink: #1F1B2E;
+        --crimson: #7B1E3B;
+        --crimson-dark: #5C1429;
+        --paper: #F7F5F3;
+        --charcoal: #1F1B2E;
+        --ash: #8A8A93;
+        --mist: #E3E0DB;
+        --amber: #FDCB6E;
+        --green: #27AE60;
+        --blue: #2E86C1;
+        --red: #FF4D6D;
+        --red-dark: #E84A64;
+        --red-light: rgba(255, 77, 109, 0.1);
+        --text: #1F1B2E;
+        --text-secondary: #5A5861;
+        --text-tertiary: #8A8A93;
+        --bg: #F7F5F3;
+        --card: #FFFFFF;
+        --border: #E3E0DB;
+        --radius: 12px;
       }
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html { -webkit-text-size-adjust: 100%; }
@@ -60,7 +112,7 @@ const { title = `${SITE.name} · ${SITE.tagline}`, description = SITE.descriptio
       ::-webkit-scrollbar { width: 4px; height: 4px; }
       ::-webkit-scrollbar-thumb { background: var(--mist); border-radius: 2px; }
       .container {
-        max-width: 720px;
+        max-width: 1280px;
         margin: 0 auto;
         padding: 0 16px;
       }
@@ -114,6 +166,7 @@ const { title = `${SITE.name} · ${SITE.tagline}`, description = SITE.descriptio
       <div style="display:flex; justify-content:center; gap:20px; margin-bottom:12px; flex-wrap:wrap;">
         <a href="/publish/" style="color:rgba(255,255,255,0.85); font-weight:500;">发布信息</a>
         <a href="/advertise/" style="color:rgba(255,255,255,0.85); font-weight:500;">广告合作</a>
+        <a href="/about/" style="color:rgba(255,255,255,0.85); font-weight:500;">关于我们</a>
         <a href={`mailto:${SITE.email}`} style="color:rgba(255,255,255,0.85); font-weight:500;">联系编辑</a>
       </div>
       <div style="opacity:0.7;">关注公众号 · 视频号：中塞通 | 信息仅供交流参考，交易请自行核实</div>

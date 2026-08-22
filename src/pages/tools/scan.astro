@@ -1,0 +1,345 @@
+---
+import Base from '../../layouts/Base.astro';
+import Header from '../../components/Header.astro';
+---
+
+<Base title="扫价签换算 · 中塞通">
+  <Header />
+  <main class="scan-wrap">
+    <h1 class="scan-title">扫价签 · 自动换算</h1>
+    <p class="scan-sub">拍一张价签照片，自动识别金额并换算成 ¥ / € / $ / RSD</p>
+
+    <div class="scan-stage" id="stage">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="canvas" hidden></canvas>
+      <div class="scan-frame">
+        <span class="corner tl"></span>
+        <span class="corner tr"></span>
+        <span class="corner bl"></span>
+        <span class="corner br"></span>
+      </div>
+      <p class="scan-hint" id="hint">开启摄像头后，把价签数字对准框内</p>
+    </div>
+
+    <div class="scan-actions">
+      <button id="btnStart" class="btn btn-primary" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+          <circle cx="12" cy="13" r="3.5"/>
+        </svg>
+        开启摄像头
+      </button>
+      <button id="btnShoot" class="btn btn-primary" type="button" hidden>拍摄并识别</button>
+      <button id="btnRetake" class="btn btn-ghost" type="button" hidden>重拍</button>
+    </div>
+
+    <p class="scan-status" id="status" hidden></p>
+
+    <div class="scan-input">
+      <label>识别结果（可手动修改）</label>
+      <div class="row">
+        <input id="amount" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+        <select id="fromCur" aria-label="原币种">
+          <option value="EUR">€ EUR 欧元</option>
+          <option value="USD">$ USD 美元</option>
+          <option value="RSD">din RSD 第纳尔</option>
+          <option value="CNY">¥ CNY 人民币</option>
+          <option value="GBP">£ GBP 英镑</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="scan-result" id="result">
+      <div class="res-card"><span class="cur">¥ CNY</span><span class="amt" id="r-cny">—</span></div>
+      <div class="res-card"><span class="cur">€ EUR</span><span class="amt" id="r-eur">—</span></div>
+      <div class="res-card"><span class="cur">$ USD</span><span class="amt" id="r-usd">—</span></div>
+      <div class="res-card"><span class="cur">din RSD</span><span class="amt" id="r-rsd">—</span></div>
+    </div>
+
+    <div class="scan-demo">
+      <div class="scan-demo-title">价格换算演示</div>
+      <div class="scan-demo-row">
+        <span class="demo-cur">din</span>
+        <input id="demo-rsd" type="text" inputmode="decimal" value="150" class="demo-input" autocomplete="off" />
+        <span class="demo-eq">≈</span>
+        <span class="demo-cur">¥</span>
+        <span class="demo-out" id="demo-cny">--</span>
+      </div>
+      <div class="scan-demo-tip">输入第纳尔金额，自动换算人民币（按当日汇率）</div>
+    </div>
+
+    <a href="/" class="back-link">← 返回首页</a>
+  </main>
+</Base>
+
+<script>
+  const TARGETS = ['CNY', 'EUR', 'USD', 'RSD'] as const;
+  const FLAG: Record<string, string> = { CNY: '¥', EUR: '€', USD: '$', RSD: 'din' };
+  let rates: Record<string, number> | null = null;
+  let stream: MediaStream | null = null;
+
+  const $ = (id: string) => document.getElementById(id)!;
+  const video = $('video') as HTMLVideoElement;
+  const canvas = $('canvas') as HTMLCanvasElement;
+  const amountEl = $('amount') as HTMLInputElement;
+  const fromEl = $('fromCur') as HTMLSelectElement;
+  const statusEl = $('status') as HTMLParagraphElement;
+
+  function setStatus(msg: string, show = true) {
+    statusEl.textContent = msg;
+    statusEl.hidden = !show;
+  }
+
+  async function loadRates(): Promise<Record<string, number>> {
+    if (rates) return rates;
+    const r = await fetch('https://open.er-api.com/v6/latest/CNY');
+    const d = await r.json();
+    rates = d.rates as Record<string, number>;
+    return rates!;
+  }
+
+  function convert(amount: number, from: string, to: string, r: Record<string, number>): number {
+    if (from === to) return amount;
+    return amount * (r[to] / r[from]);
+  }
+
+  function render(amount: number, from: string) {
+    if (!rates) return;
+    for (const t of TARGETS) {
+      const v = convert(amount, from, t, rates);
+      const decimals = t === 'RSD' ? 0 : t === 'EUR' ? 4 : 2;
+      $(`r-${t.toLowerCase()}`).textContent =
+        Number.isFinite(v) ? `${FLAG[t]} ${v.toLocaleString('en-US', { maximumFractionDigits: decimals, minimumFractionDigits: decimals })}` : '—';
+    }
+  }
+
+  // ---------- 摄像头 ----------
+  async function startCamera() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      video.srcObject = stream;
+      await video.play();
+      ($('btnStart') as HTMLButtonElement).hidden = true;
+      ($('btnShoot') as HTMLButtonElement).hidden = false;
+      ($('btnRetake') as HTMLButtonElement).hidden = true;
+      setStatus('');
+    } catch (e: any) {
+      setStatus(`无法访问摄像头：${e?.message ?? e}（请允许权限，或直接在下方手动输入金额）`);
+    }
+  }
+
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      stream = null;
+    }
+  }
+
+  // ---------- Tesseract.js 懒加载 ----------
+  function loadTesseractScript(): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if ((window as any).Tesseract) return resolve((window as any).Tesseract);
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+      s.async = true;
+      s.onload = () => resolve((window as any).Tesseract);
+      s.onerror = () => reject(new Error('Tesseract.js 加载失败'));
+      document.head.appendChild(s);
+    });
+  }
+
+  function extractNumber(text: string): number | null {
+    // 欧洲数字格式 12,99 或美式 12.99
+    const cleaned = text
+      .replace(/[€$¥£]/g, ' ')
+      .replace(/\b(RS[D]?|DIN|EUR|USD|CNY|GBP|RSD)\b/gi, ' ')
+      .replace(/[Oo](?=\d)/g, '0')
+      .replace(/[Il](?=\d)/g, '1');
+    const m = cleaned.match(/-?\d{1,7}([.,]\d{1,2})?/);
+    if (!m) return null;
+    return parseFloat(m[0].replace(',', '.'));
+  }
+
+  function guessCurrency(text: string): string | null {
+    const t = text.toUpperCase();
+    if (/€|EUR/.test(t)) return 'EUR';
+    if (/RSD|DIN|DINAR|第纳尔/.test(t)) return 'RSD';
+    if (/\$|USD/.test(t)) return 'USD';
+    if (/¥|CNY|￥|元|RMB/.test(t)) return 'CNY';
+    if (/£|GBP/.test(t)) return 'GBP';
+    return null;
+  }
+
+  async function recognizeFromVideo() {
+    if (!video.videoWidth) {
+      setStatus('摄像头尚未就绪');
+      return;
+    }
+    setStatus('加载识别引擎（首次约 2-3 秒）...');
+    ($('btnShoot') as HTMLButtonElement).disabled = true;
+    try {
+      const Tesseract = await loadTesseractScript();
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(video, 0, 0, w, h);
+
+      setStatus('正在识别数字...');
+      const worker = await Tesseract.createWorker('eng');
+      const { data } = await worker.recognize(canvas);
+      await worker.terminate();
+
+      const text: string = (data as any).text || '';
+      const num = extractNumber(text);
+      const guessed = guessCurrency(text);
+
+      if (num == null) {
+        setStatus(`未识别到数字（识别文本："${text.trim().slice(0, 60)}"），请重拍或手动输入`);
+      } else {
+        amountEl.value = num.toString();
+        if (guessed) fromEl.value = guessed;
+        setStatus(`已识别：${text.trim().slice(0, 60).replace(/\s+/g, ' ')}`);
+      }
+      recompute();
+    } catch (e: any) {
+      setStatus(`识别失败：${e?.message ?? e}（请手动输入金额）`);
+    } finally {
+      ($('btnShoot') as HTMLButtonElement).disabled = false;
+      stopCamera();
+      video.srcObject = null;
+      ($('btnShoot') as HTMLButtonElement).hidden = true;
+      ($('btnRetake') as HTMLButtonElement).hidden = false;
+    }
+  }
+
+  function retake() {
+    ($('btnRetake') as HTMLButtonElement).hidden = true;
+    setStatus('重新开启摄像头…');
+    startCamera();
+  }
+
+  function recompute() {
+    const v = parseFloat(amountEl.value.replace(',', '.'));
+    if (!Number.isFinite(v) || v <= 0) {
+      for (const t of TARGETS) $(`r-${t.toLowerCase()}`).textContent = '—';
+      return;
+    }
+    render(v, fromEl.value);
+  }
+
+  // 绑定
+  $('btnStart').addEventListener('click', startCamera);
+  $('btnShoot').addEventListener('click', recognizeFromVideo);
+  $('btnRetake').addEventListener('click', retake);
+  amountEl.addEventListener('input', recompute);
+  fromEl.addEventListener('change', recompute);
+
+  // 价格换算演示：din → ¥
+  const demoRsd = document.getElementById('demo-rsd') as HTMLInputElement | null;
+  const demoCny = document.getElementById('demo-cny') as HTMLElement | null;
+  function demoCalc() {
+    if (!rates || !demoRsd || !demoCny) return;
+    const v = parseFloat(demoRsd.value.replace(',', '.'));
+    if (!Number.isFinite(v) || v <= 0) { demoCny.textContent = '--'; return; }
+    demoCny.textContent = (v / (rates.RSD || 1)).toFixed(2);
+  }
+  demoRsd?.addEventListener('input', demoCalc);
+
+  // 预加载汇率
+  loadRates()
+    .then(() => { recompute(); demoCalc(); })
+    .catch(() => setStatus('汇率加载失败，可手动输入后查看', true));
+
+  // 离开页面停摄像头
+  window.addEventListener('pagehide', stopCamera);
+</script>
+
+<style>
+  .scan-wrap { max-width: 520px; margin: 0 auto; padding: 4px 0 32px; }
+  .scan-title { font-size: 22px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; margin: 8px 0 4px; }
+  .scan-sub { font-size: 13px; color: var(--ash); margin: 0 0 14px; }
+
+  .scan-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #0e0e1a;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  #video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .scan-frame {
+    position: absolute; inset: 14%;
+    pointer-events: none;
+  }
+  .corner {
+    position: absolute; width: 18px; height: 18px;
+    border-color: var(--crimson, #E94560); border-style: solid; border-width: 0;
+  }
+  .corner.tl { top: 0; left: 0; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 4px; }
+  .corner.tr { top: 0; right: 0; border-top-width: 3px; border-right-width: 3px; border-top-right-radius: 4px; }
+  .corner.bl { bottom: 0; left: 0; border-bottom-width: 3px; border-left-width: 3px; border-bottom-left-radius: 4px; }
+  .corner.br { bottom: 0; right: 0; border-bottom-width: 3px; border-right-width: 3px; border-bottom-right-radius: 4px; }
+  .scan-hint {
+    position: absolute; left: 0; right: 0; bottom: 10px;
+    text-align: center; color: rgba(255,255,255,0.75); font-size: 12px; margin: 0;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  }
+
+  .scan-actions { display: flex; gap: 10px; margin-top: 12px; }
+  .btn {
+    flex: 1; padding: 12px 14px; border-radius: 14px; border: 0;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-primary:disabled { opacity: 0.5; }
+  .btn-ghost { background: var(--card); color: var(--ink); border: 1px solid var(--border); }
+  .btn:active { transform: scale(0.97); }
+
+  .scan-status {
+    margin: 10px 0 0; padding: 10px 12px; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--border);
+    font-size: 12px; color: var(--charcoal); line-height: 1.5;
+  }
+
+  .scan-input { margin-top: 16px; }
+  .scan-input label { display: block; font-size: 12px; color: var(--ash); font-weight: 600; margin-bottom: 6px; }
+  .scan-input .row { display: flex; gap: 8px; }
+  .scan-input input {
+    flex: 1; padding: 12px 14px; font-size: 20px; font-weight: 700;
+    border: 1px solid var(--border); border-radius: 14px; background: var(--card);
+    color: var(--ink); outline: none;
+  }
+  .scan-input input:focus { border-color: var(--crimson, #E94560); }
+  .scan-input select {
+    padding: 12px 10px; font-size: 14px; font-weight: 600;
+    border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--ink);
+    min-width: 130px;
+  }
+
+  .scan-result { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .scan-demo { margin-top: 16px; background: var(--pink-soft); border: 1px dashed var(--wine); border-radius: 12px; padding: 14px; }
+  .scan-demo-title { font-size: 12px; font-weight: 700; color: var(--wine); margin-bottom: 10px; }
+  .scan-demo-row { display: flex; align-items: center; gap: 8px; font-size: 16px; flex-wrap: wrap; }
+  .demo-cur { font-weight: 700; color: var(--ink-2); }
+  .demo-input { width: 90px; padding: 8px 10px; font-size: 16px; font-weight: 700; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); }
+  .demo-input:focus { outline: none; border-color: var(--wine); }
+  .demo-eq { color: var(--ink-3); }
+  .demo-out { font-size: 20px; font-weight: 800; color: var(--wine); font-variant-numeric: tabular-nums; }
+  .scan-demo-tip { font-size: 11px; color: var(--ink-3); margin-top: 8px; }
+  .res-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 12px; text-align: center;
+  }
+  .res-card .cur { display: block; font-size: 11px; color: var(--ash); font-weight: 700; letter-spacing: 0.5px; }
+  .res-card .amt { display: block; font-size: 19px; font-weight: 800; color: var(--ink); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+  .back-link { display: inline-block; margin-top: 18px; font-size: 13px; color: var(--ash); }
+</style>

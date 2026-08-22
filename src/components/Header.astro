@@ -1,33 +1,118 @@
 ---
 import { SITE } from '../data/site';
+interface Props {
+  active?: string; // 当前高亮导航：home / news / rentals / guide / embassy / chamber
+}
+const { active = '' } = Astro.props;
+const nav = [
+  { key: 'home', label: '首页', href: '/' },
+  { key: 'news', label: '要闻', href: '/news/' },
+  { key: 'rentals', label: '分类', href: '/rentals/' },
+  { key: 'guide', label: '指南', href: '/guide/' },
+  { key: 'tools', label: '工具', href: '/tools/' },
+  { key: 'embassy', label: '使馆', href: '/news/?kind=embassy' },
+  { key: 'chamber', label: '商会', href: '/news/?kind=chamber' },
+];
 ---
 
-<header
-  style="position:sticky; top:0; z-index:100; background:rgba(248,249,250,0.85); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border-bottom:1px solid var(--border);"
->
-  <div style="display:flex; align-items:center; gap:12px; height:56px;">
-    <a href="/" style="display:flex; align-items:center; gap:10px; font-weight:800; font-size:16px; letter-spacing:-0.3px;">
-      <span
-        style="width:36px; height:36px; border-radius:10px; background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; letter-spacing:0.5px;"
-      >
-        SRB
-      </span>
-      <span style="color:var(--ink);">塞尔维亚华人信息网</span>
+<header class="header">
+  <div class="header-inner wrap">
+    <a href="/" class="logo" aria-label="中塞通首页">
+      <div class="logo-badge">SRB</div>
+      <div class="logo-name">
+        <span class="logo-name-b">中塞通</span>
+        <span class="logo-name-s">塞尔维亚华人信息平台</span>
+      </div>
     </a>
-    <span style="flex:1;"></span>
-    <form action="/search" method="get" style="display:flex; align-items:center; background:var(--card); border:1px solid var(--border); border-radius:18px; padding:0 12px; height:32px; width:120px;">
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="margin-right:6px;">
-        <circle cx="5" cy="5" r="3.5" stroke="var(--ash)" />
-        <path d="M8 8l2.5 2.5" stroke="var(--ash)" />
+
+    <nav class="nav-desktop" aria-label="主导航">
+      {nav.map((n) => (
+        <a href={n.href} class:list={[active === n.key && 'active']}>{n.label}</a>
+      ))}
+    </nav>
+
+    <form action="/search" method="get" class="search" role="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+        <path d="M16 16L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
       </svg>
-      <input
-        name="q"
-        type="search"
-        placeholder="搜索"
-        aria-label="搜索"
-        style="border:none; outline:none; background:transparent; font-size:13px; width:100%; color:var(--charcoal);"
-      />
+      <input name="q" type="search" placeholder="搜索房源、工作、资讯…" aria-label="搜索" autocomplete="off" />
     </form>
-    <a href="/publish" class="btn-primary" style="flex-shrink:0; border-radius:14px;">发布</a>
+
+    <a href="/publish" class="btn btn-pink">发布</a>
   </div>
 </header>
+
+<style>
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 1024px) { .wrap { padding: 0 40px; } }
+
+  .header {
+    background: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    border-bottom: 1px solid var(--line-soft, #EFEDEA);
+  }
+  .header-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 56px;
+  }
+  @media (min-width: 1024px) { .header-inner { height: 72px; gap: 24px; } }
+
+  .logo { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  @media (min-width: 1024px) { .logo { gap: 10px; } }
+  .logo-badge {
+    width: 34px; height: 34px;
+    border-radius: 9px;
+    background: var(--wine, #7B1E3B);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  @media (min-width: 1024px) { .logo-badge { width: 40px; height: 40px; font-size: 15px; border-radius: 11px; } }
+  .logo-name { display: flex; flex-direction: column; line-height: 1.15; }
+  .logo-name-b { font-size: 16px; font-weight: 700; color: var(--ink, #1F1B2E); }
+  @media (min-width: 1024px) { .logo-name-b { font-size: 19px; } }
+  .logo-name-s { font-size: 9px; color: var(--ink-3, #8A8A93); }
+  @media (min-width: 1024px) { .logo-name-s { font-size: 11px; } }
+
+  .nav-desktop { display: none; }
+  @media (min-width: 1024px) {
+    .nav-desktop { display: flex; gap: 22px; align-items: center; }
+    .nav-desktop a { font-size: 14px; color: var(--ink-2, #5A5861); padding: 6px 0; transition: color .2s; }
+    .nav-desktop a:hover { color: var(--wine, #7B1E3B); }
+    .nav-desktop a.active { color: var(--wine, #7B1E3B); font-weight: 600; }
+  }
+
+  .search {
+    flex: 1;
+    display: flex; align-items: center; gap: 6px;
+    background: #F2F1EF;
+    border-radius: 18px;
+    height: 36px;
+    padding: 0 12px;
+    min-width: 0;
+  }
+  .search svg { color: var(--ink-3, #8A8A93); flex-shrink: 0; }
+  .search input {
+    flex: 1;
+    border: none; outline: none; background: transparent;
+    font-size: 13px; color: var(--ink, #1F1B2E);
+    min-width: 0;
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px; padding: 8px 18px;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: transform .15s, opacity .2s;
+    flex-shrink: 0;
+  }
+  .btn-pink { background: var(--pink, #FF4D6D); color: #fff; }
+  .btn-pink:active { transform: scale(0.95); }
+  .btn-pink:hover { opacity: 0.92; }
+</style>

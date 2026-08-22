@@ -1,5 +1,6 @@
 ---
 title: 泽蒙区 二室一厅 带家具出租
+summary: "两室一厅，约 62 平米，带全套家具家电，拎包入住。"
 category: rentals
 price: 700€/月
 location: 新贝·泽蒙

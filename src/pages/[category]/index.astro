@@ -4,6 +4,7 @@ import Header from '../../components/Header.astro';
 import TabBar from '../../components/TabBar.astro';
 import Card from '../../components/Card.astro';
 import { getCollection } from 'astro:content';
+import type { CollectionEntry } from 'astro:content';
 import { CATEGORY_LABEL, NEWS_KINDS } from '../../data/site';
 
 export function getStaticPaths() {
@@ -13,32 +14,48 @@ export function getStaticPaths() {
 
 const { category } = Astro.params;
 const all = await getCollection('items');
-const items = all
-  .filter((i) => i.data.status === 'active' && i.data.category === category)
-  .sort(
-    (a, b) =>
-      Number(b.data.featured) - Number(a.data.featured) ||
-      b.data.date.getTime() - a.data.date.getTime()
-  );
+const active = all.filter((i) => i.data.status === 'active' && i.data.category === category);
+
+// 去重：按 来源|标题 保留最新一条
+const dedup = new Map<string, CollectionEntry<'items'>>();
+for (const i of active) {
+  const key = `${i.data.source ?? ''}|${i.data.title.replace(/\s+/g, '')}`;
+  const prev = dedup.get(key);
+  if (!prev || i.data.date.getTime() > prev.data.date.getTime()) dedup.set(key, i);
+}
+
+// 分类页：限 12 + 查看更多
+const PAGE = 12;
+const allItems = [...dedup.values()].sort(
+  (a, b) =>
+    Number(b.data.featured) - Number(a.data.featured) ||
+    b.data.date.getTime() - a.data.date.getTime()
+);
+const items = allItems.slice(0, PAGE);
+const hiddenItems = allItems.slice(PAGE);
+const hasMore = hiddenItems.length > 0;
+
 const label = CATEGORY_LABEL[category ?? ''] ?? '';
 const isNews = category === 'news';
 ---
 
 <Base title={`${label} · 中塞通`}>
-  <Header />
+  <Header active={category ?? ''} />
   <TabBar active={category ?? ''} />
-  <div class="section-title">{label}</div>
+
+  <div class="sec-head" style="margin: 18px 16px 0;">
+    <div class="sec-title">
+      <div class="sec-bar"></div>
+      <h2>{label}</h2>
+      <span class="badge-count">{allItems.length}条</span>
+    </div>
+  </div>
 
   {isNews && (
-    <div id="news-kinds" style="display:flex; gap:6px; margin-bottom:12px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px;">
+    <div id="news-kinds" class="news-kinds" aria-label="新闻子分类">
       {
         NEWS_KINDS.map((k) => (
-          <button
-            class="kind-chip"
-            data-kind={k.key}
-            onclick="filterNews(this)"
-            style={`flex-shrink:0; padding:4px 14px; border-radius:14px; font-size:12px; cursor:pointer; background:${k.key === 'all' ? 'var(--red)' : 'var(--card)'}; color:${k.key === 'all' ? '#fff' : 'var(--text-secondary)'}; border:1px solid ${k.key === 'all' ? 'transparent' : 'var(--border)'};`}
-          >
+          <button class="kind-chip" data-kind={k.key} type="button" data-default={k.key === 'all' ? '1' : ''}>
             {k.label}
           </button>
         ))
@@ -48,27 +65,91 @@ const isNews = category === 'news';
 
   {
     items.length === 0 ? (
-      <div class="empty">该分类暂无信息，欢迎投稿</div>
+      <div class="empty">
+        该分类暂无信息
+        <a href="/publish" class="empty-cta">去发布一条</a>
+      </div>
     ) : (
-      <div class="feed" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div class="feed" id="feed">
         {items.map((item) => <Card item={item} />)}
+        {hasMore && (
+          <Fragment>
+            <div class="feed-hidden" id="feed-more">
+              {hiddenItems.map((item) => <Card item={item} />)}
+            </div>
+            <button id="load-more" type="button" class="more-btn">
+              查看更多 ({hiddenItems.length}) <span>→</span>
+            </button>
+          </Fragment>
+        )}
       </div>
     )
   }
 </Base>
 
-<script>
-  function filterNews(btn: HTMLButtonElement) {
-    const kind = btn.getAttribute('data-kind');
-    document.querySelectorAll('.kind-chip').forEach((c) => {
-      const el = c as HTMLButtonElement;
-      const active = el === btn;
-      el.style.background = active ? 'var(--red)' : 'var(--card)';
-      el.style.color = active ? '#fff' : 'var(--text-secondary)';
+<script is:inline>
+  document.addEventListener('DOMContentLoaded', () => {
+    // 新闻子分类筛选（仅 /news/ 页生效）
+    const kinds = document.getElementById('news-kinds');
+    if (kinds) {
+      const chips = kinds.querySelectorAll('.kind-chip');
+      chips.forEach((c) => {
+        if (c.dataset.default === '1') c.classList.add('active');
+      });
+      kinds.addEventListener('click', (e) => {
+        const t = e.target as HTMLElement;
+        const btn = t.closest('.kind-chip') as HTMLElement | null;
+        if (!btn) return;
+        chips.forEach((c) => c.classList.remove('active'));
+        btn.classList.add('active');
+        const kind = btn.dataset.kind;
+        document.querySelectorAll('.feed a[data-kind]').forEach((card) => {
+          const el = card as HTMLElement;
+          el.style.display = kind === 'all' || el.dataset.kind === kind ? '' : 'none';
+        });
+      });
+    }
+    // 查看更多展开
+    document.getElementById('load-more')?.addEventListener('click', () => {
+      document.getElementById('feed-more')?.classList.add('show');
+      document.getElementById('load-more')?.remove();
     });
-    document.querySelectorAll('.feed a[data-kind]').forEach((card) => {
-      const el = card as HTMLElement;
-      el.style.display = kind === 'all' || el.getAttribute('data-kind') === kind ? '' : 'none';
-    });
-  }
+  });
 </script>
+
+<style>
+  .sec-head { display: flex; align-items: center; justify-content: space-between; margin: 18px 16px 0; }
+  @media (min-width: 1024px) { .sec-head { margin: 0; } }
+  .sec-title { display: flex; align-items: center; gap: 8px; }
+  .sec-bar { width: 4px; height: 18px; background: var(--wine); border-radius: 2px; }
+  @media (min-width: 1024px) { .sec-bar { width: 5px; height: 22px; } }
+  .sec-title h2 { font-size: 19px; font-weight: 700; }
+  @media (min-width: 1024px) { .sec-title h2 { font-size: 22px; } }
+  .badge-count { background: var(--pink-soft); color: var(--wine); font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 8px; }
+
+  .news-kinds { display: flex; gap: 8px; padding: 12px 16px 4px; overflow-x: auto; scrollbar-width: none; }
+  .news-kinds::-webkit-scrollbar { display: none; }
+  @media (min-width: 1024px) { .news-kinds { padding: 0 0 12px; } }
+  .kind-chip {
+    flex-shrink: 0;
+    padding: 7px 14px; border-radius: 15px;
+    font-size: 12px; white-space: nowrap;
+    background: #fff; color: var(--ink-2);
+    border: 1px solid var(--line);
+    transition: all .2s;
+    cursor: pointer;
+  }
+  .kind-chip:hover { color: var(--wine); border-color: var(--wine); }
+  .kind-chip.active { background: var(--wine); color: #fff; border-color: var(--wine); font-weight: 600; }
+
+  .feed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px 4px; }
+  @media (min-width: 1024px) { .feed { grid-template-columns: repeat(3, 1fr); gap: 18px; padding: 0; } }
+  .feed-hidden { display: none; }
+  .feed-hidden.show { display: contents; }
+  .more-btn { display: block; text-align: center; margin: 14px 16px 0; padding: 13px; border-radius: 14px; background: #fff; border: 1px solid var(--line); color: var(--wine); font-weight: 600; font-size: 14px; border: 0; }
+  .more-btn:active { transform: scale(0.97); }
+  @media (min-width: 1024px) { .more-btn { margin: 0; } }
+
+  .empty { text-align: center; color: var(--ink-3); padding: 60px 0; font-size: 14px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+  .empty-cta { display: inline-block; padding: 9px 20px; border-radius: 12px; background: var(--pink); color: #fff; font-weight: 600; font-size: 13px; }
+</style>

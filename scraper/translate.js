@@ -90,6 +90,7 @@ async function callAI(system, user) {
               temperature: 0.3,
               max_tokens: 1024,
             }),
+            signal: AbortSignal.timeout(30000), // 30s 超时，防止 API 挂起卡死整个采集
           });
           if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));

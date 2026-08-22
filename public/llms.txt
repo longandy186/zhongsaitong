@@ -1,0 +1,19 @@
+# 中塞通 · 塞尔维亚华人信息平台
+
+面向塞尔维亚华人的一站式信息平台：每日要闻、使馆/商会动态、租房、招聘、二手买卖、生活指南、供求对接，以及汇率/天气工具和扫价签换算。
+
+## 核心页面
+
+- 首页: https://zhongsaitong.pages.dev/
+- 今日要闻: https://zhongsaitong.pages.dev/news/
+- 租房: https://zhongsaitong.pages.dev/rentals/
+- 招聘: https://zhongsaitong.pages.dev/jobs/
+- 二手买卖: https://zhongsaitong.pages.dev/secondhand/
+- 生活指南: https://zhongsaitong.pages.dev/guide/
+- 供求: https://zhongsaitong.pages.dev/supply/
+- 常见问题: https://zhongsaitong.pages.dev/faq/
+- 汇率/天气/扫价签: https://zhongsaitong.pages.dev/tools/scan/
+
+## 关于
+
+中塞通（ZhongSaiTong，塞尔维亚华人信息平台）服务在塞华人，信息来源于使馆公告、官方媒体与本地社群，均标注来源并定期更新。汇率与天气每日 8:00 自动刷新。

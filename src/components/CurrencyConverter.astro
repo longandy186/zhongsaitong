@@ -1,0 +1,139 @@
+---
+interface Props {
+  compact?: boolean; // 桌面右栏小卡模式
+}
+const { compact = false } = Astro.props;
+---
+
+<div class:list={['ccard', compact && 'ccard-compact']} data-cc>
+  <div class="ccard-head">
+    <span class="ccard-title">汇率换算</span>
+    <span class="ccard-up" id="cc-up">加载中…</span>
+  </div>
+  <div class="ccard-row">
+    <input class="cc-input" type="text" inputmode="decimal" placeholder="输入金额" value="100" autocomplete="off" />
+    <select class="cc-from" aria-label="原币种">
+      <option value="CNY">¥ 人民币</option>
+      <option value="EUR">€ 欧元</option>
+      <option value="RSD">din 第纳尔</option>
+    </select>
+  </div>
+  <div class="ccard-results">
+    <div class="cc-ex" aria-hidden="true">兑换</div>
+    <div class="cc-out cc-results">
+      <div class="cc-empty">输入金额后自动换算</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const CACHE_KEY = 'zst_rates_v1';
+  const CACHE_TS = 'zst_rates_ts';
+  const CURR = [
+    { code: 'CNY', name: '人民币', dec: 2 },
+    { code: 'EUR', name: '欧元', dec: 2 },
+    { code: 'RSD', name: '第纳尔', dec: 0 },
+  ];
+  let rates: Record<string, number> | null = null;
+  function cachedRates(): Record<string, number> | null {
+    try { return JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); } catch { return null; }
+  }
+  function convert(amount: number, fromCode: string, toCode: string): number {
+    if (fromCode === toCode) return amount;
+    return amount * ((rates?.[toCode] ?? 0) / (rates?.[fromCode] ?? 1));
+  }
+  function init(root: HTMLElement) {
+    const input = root.querySelector('.cc-input') as HTMLInputElement;
+    const from = root.querySelector('.cc-from') as HTMLSelectElement;
+    const res = root.querySelector('.cc-results') as HTMLElement;
+    function render() {
+      const v = parseFloat(input.value.replace(',', '.'));
+      if (!Number.isFinite(v) || v <= 0 || !rates) {
+        res.innerHTML = '<div class="cc-empty">输入金额后自动换算</div>';
+        return;
+      }
+      const fromCode = from.value;
+      const lines = CURR
+        .filter((c) => c.code !== fromCode)
+        .map((c) => {
+          const out = convert(v, fromCode, c.code);
+          const num = out.toLocaleString('en-US', { maximumFractionDigits: c.dec, minimumFractionDigits: c.dec });
+          return `<div class="cc-line"><span class="cc-ccy">${c.name}</span><span class="cc-num">${num}</span></div>`;
+        });
+      res.innerHTML = lines.join('');
+    }
+    input.addEventListener('input', render);
+    from.addEventListener('change', render);
+    return render;
+  }
+  async function load() {
+    const cached = cachedRates();
+    const ts = localStorage.getItem(CACHE_TS);
+    if (cached && ts && Date.now() - parseInt(ts, 10) < 3600000) {
+      rates = cached;
+    } else {
+      try {
+        const r = await fetch('https://open.er-api.com/v6/latest/CNY', { cache: 'no-store' });
+        const d = await r.json();
+        rates = d.rates as Record<string, number>;
+        if (rates) {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(rates));
+          localStorage.setItem(CACHE_TS, String(Date.now()));
+        }
+      } catch { rates = cached; }
+    }
+    const renders: (() => void)[] = [];
+    document.querySelectorAll('[data-cc]').forEach((el) => renders.push(init(el as HTMLElement)));
+    const t = localStorage.getItem(CACHE_TS) ? new Date(parseInt(localStorage.getItem(CACHE_TS) || '0', 10)) : new Date();
+    document.querySelectorAll('.ccard-up').forEach((el) => {
+      if (rates) el.textContent = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')} 更新`;
+      else el.textContent = '汇率加载失败';
+    });
+    renders.forEach((r) => r());
+  }
+  load();
+</script>
+
+<style>
+  .ccard { background: #fff; border-radius: var(--r-lg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .ccard-compact { padding: 14px; gap: 10px; }
+  .ccard-head { display: flex; align-items: center; justify-content: space-between; }
+  .ccard-title { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .ccard-up { font-size: 10px; color: var(--ink-3); }
+  .ccard-row { display: flex; gap: 8px; }
+  .ccard-row input {
+    flex: 1; min-width: 0; padding: 10px 14px; font-size: 16px; font-weight: 700;
+    border: 1.5px solid #C9C2BD; border-radius: 10px; color: var(--ink); background: #FAF8F5;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.04);
+    transition: border-color .2s, background .2s, box-shadow .2s;
+  }
+  .ccard-row input:hover { background: #fff; }
+  .ccard-row input:focus { outline: none; border-color: var(--wine); background: #fff; box-shadow: 0 0 0 3px var(--pink-soft), inset 0 1px 2px rgba(0,0,0,.04); }
+  .ccard-row select {
+    padding: 10px 8px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: #fff;
+  }
+  .ccard-results { display: flex; gap: 14px; }
+  .cc-ex {
+    writing-mode: vertical-rl;
+    font-size: 15px; font-weight: 800; color: var(--wine);
+    letter-spacing: 3px; flex-shrink: 0;
+    padding: 2px 0 0;
+  }
+  .cc-out { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .cc-line {
+    background: #FAF8F5; border-radius: 10px; padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  }
+  .cc-ccy { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+  .cc-num { font-size: 20px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .cc-empty { font-size: 12px; color: var(--ink-3); padding: 6px 0; }
+
+  @media (max-width: 480px) {
+    .cc-ex { font-size: 13px; letter-spacing: 2px; }
+    .cc-num { font-size: 17px; }
+    .cc-line { padding: 11px 12px; gap: 12px; }
+    .ccard-row select { max-width: 116px; }
+    .ccard-results { gap: 10px; }
+  }
+</style>

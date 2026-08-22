@@ -6,7 +6,7 @@ import { getCollection } from 'astro:content';
 
 const q = Astro.url.searchParams.get('q')?.trim().toLowerCase() ?? '';
 const all = await getCollection('items');
-const items = all
+const filtered = all
   .filter((i) => i.data.status === 'active')
   .filter((i) => {
     if (!q) return false;
@@ -14,18 +14,123 @@ const items = all
     return haystack.includes(q);
   })
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+const PAGE = 12;
+const items = filtered.slice(0, PAGE);
+const hiddenItems = filtered.slice(PAGE);
+const hasMore = hiddenItems.length > 0;
 ---
 
-<Base title={`搜索：${q} · 中塞通`}>
+<Base title={q ? `搜索：${q} · 中塞通` : '搜索 · 中塞通'}>
   <Header />
-  <div class="section-title">{q ? `搜索 "${q}" 的结果` : '搜索'}</div>
+
+  <section class="search-hero">
+    <h1>搜索</h1>
+    <form action="/search" method="get" class="search-bar" role="search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+        <path d="M16 16L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+      <input
+        name="q"
+        type="search"
+        value={q}
+        placeholder="搜索房源、工作、资讯、指南…"
+        aria-label="搜索"
+        autocomplete="off"
+        autofocus
+      />
+      <button type="submit" class="btn-pink">搜索</button>
+    </form>
+    {q && (
+      <div class="search-meta">
+        {filtered.length > 0
+          ? `找到 ${filtered.length} 条与 "${q}" 相关的结果`
+          : `没有找到与 "${q}" 相关的信息`}
+      </div>
+    )}
+  </section>
+
   {
     !q ? (
-      <div class="empty">请输入关键词搜索</div>
+      <div class="empty">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="opacity:.35;">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+          <path d="M16 16L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <p>请输入关键词搜索</p>
+        <div class="suggest">
+          <span>试试：</span>
+          <a href="/search/?q=租房">租房</a>
+          <a href="/search/?q=招聘">招聘</a>
+          <a href="/search/?q=使馆">使馆</a>
+        </div>
+      </div>
     ) : items.length === 0 ? (
-      <div class="empty">没有找到与 "{q}" 相关的信息</div>
+      <div class="empty">
+        <p>没有找到与 "{q}" 相关的信息</p>
+        <p class="empty-sub">换个关键词，或<button class="suggest-btn" onclick="history.back()">返回上一页</button></p>
+      </div>
     ) : (
-      items.map((item) => <Card item={item} />)
+      <div class="feed" id="feed">
+        {items.map((item) => <Card item={item} />)}
+        {hasMore && (
+          <Fragment>
+            <div class="feed-hidden" id="feed-more">
+              {hiddenItems.map((item) => <Card item={item} />)}
+            </div>
+            <button id="load-more" type="button" class="more-btn">
+              查看更多 ({hiddenItems.length}) <span>→</span>
+            </button>
+          </Fragment>
+        )}
+      </div>
     )
   }
 </Base>
+
+<script is:inline>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('load-more')?.addEventListener('click', () => {
+      document.getElementById('feed-more')?.classList.add('show');
+      document.getElementById('load-more')?.remove();
+    });
+  });
+</script>
+
+<style>
+  .search-hero { padding: 24px 16px 18px; display: flex; flex-direction: column; gap: 14px; max-width: 720px; margin: 0 auto; }
+  @media (min-width: 1024px) { .search-hero { padding: 36px 0 24px; } }
+  .search-hero h1 { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
+  .search-bar {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 6px 6px 18px;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .search-bar:focus-within { border-color: var(--wine); box-shadow: 0 0 0 4px var(--pink-soft); }
+  .search-bar svg { color: var(--ink-3); flex-shrink: 0; }
+  .search-bar input {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 15px; color: var(--ink); padding: 8px 0; min-width: 0;
+  }
+  .search-bar input::placeholder { color: var(--ink-4); }
+  .btn-pink { background: var(--pink); color: #fff; border: 0; border-radius: 999px; padding: 8px 22px; font-size: 14px; font-weight: 700; cursor: pointer; transition: background .2s; }
+  .btn-pink:hover { background: #E83A5A; }
+  .search-meta { font-size: 13px; color: var(--ink-2); padding-left: 4px; }
+
+  .feed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px 4px; }
+  @media (min-width: 1024px) { .feed { grid-template-columns: repeat(3, 1fr); gap: 18px; padding: 0; max-width: 1280px; margin: 0 auto; } }
+  .feed-hidden { display: none; }
+  .feed-hidden.show { display: contents; }
+  .more-btn { display: block; text-align: center; margin: 14px 16px 0; padding: 13px; border-radius: 14px; background: #fff; border: 0; color: var(--wine); font-weight: 600; font-size: 14px; }
+  .more-btn:active { transform: scale(0.97); }
+  @media (min-width: 1024px) { .more-btn { margin: 0; } }
+
+  .empty { text-align: center; color: var(--ink-3); padding: 60px 16px; font-size: 14px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  .empty p { margin: 0; }
+  .empty-sub { font-size: 12px; color: var(--ink-4); }
+  .suggest { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; font-size: 13px; color: var(--ink-2); }
+  .suggest a { background: var(--pink-soft); color: var(--wine); padding: 4px 12px; border-radius: 999px; font-size: 12px; }
+  .suggest-btn { background: none; border: 0; color: var(--wine); cursor: pointer; padding: 0; font: inherit; }
+</style>

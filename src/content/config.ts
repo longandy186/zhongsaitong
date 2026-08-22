@@ -19,6 +19,8 @@ const items = defineCollection({
     images: z.array(z.string()).default([]),
     tags: z.array(z.string()).default([]),
     source: z.string().optional(),
+    // GEO：可直接引用的摘要（2-3 句结论，用于 meta description + JSON-LD + 详情页摘要段）
+    summary: z.string().optional(),
     // 商业标记：置顶高亮 / 商家
     promoted: z.boolean().default(false),
   }),

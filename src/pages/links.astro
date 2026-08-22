@@ -1,0 +1,108 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import { LINK_GROUPS, EMERGENCY_TELS } from '../data/links';
+---
+
+<Base title="常用电话与网址 · 中塞通">
+  <Header active="links" />
+
+  <section class="page-hero">
+    <h1>在塞常用电话与网址</h1>
+    <p>应急 / 医疗 / 交通 / 生活 / 商业 / 资讯 一站式索引。紧急号码为塞尔维亚官方标准，其余联系方式以官方最新公布为准。</p>
+  </section>
+
+  <div class="emg-card">
+    <div class="emg-title">急用电话（点击即可拨打）</div>
+    <div class="emg-grid">
+      {
+        EMERGENCY_TELS.map((t) => (
+          <a class="emg-item" href={`tel:${t.tel}`}>
+            <svg class="emg-phone" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div class="emg-name">{t.name}</div>
+            <div class="emg-tel">{t.tel}</div>
+            {t.note && <div class="emg-note">{t.note}</div>}
+          </a>
+        ))
+      }
+    </div>
+  </div>
+
+  <div class="links-list">
+    {
+      LINK_GROUPS.map((g) => (
+        <section class="link-group">
+          <h2><span class="link-icon">{g.icon}</span>{g.title}</h2>
+          <div class="link-items">
+            {
+              g.items.map((it) => (
+                <div class="link-item">
+                  <div class="link-name">{it.name}</div>
+                  {it.tel && <div class="link-tel">{it.tel}</div>}
+                  {it.url && <div class="link-url">{it.url.replace(/^https?:\/\//, '')}</div>}
+                  <div class="link-actions">
+                    {it.tel && <a href={`tel:${it.tel}`}>拨打电话</a>}
+                    {it.url && <a href={it.url} target="_blank" rel="noopener">打开官网</a>}
+                  </div>
+                  {it.note && <div class="link-note">{it.note}</div>}
+                </div>
+              ))
+            }
+          </div>
+        </section>
+      ))
+    }
+  </div>
+
+  <p class="links-tip">信息仅供应急参考，具体联系方式请以官方最新公布为准。</p>
+</Base>
+
+<style>
+  .page-hero { padding: 24px 16px 16px; max-width: 1080px; margin: 0 auto; }
+  @media (min-width: 1024px) { .page-hero { padding: 36px 0 20px; } }
+  .page-hero h1 { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
+  .page-hero p { font-size: 13px; color: var(--ink-2); margin-top: 6px; line-height: 1.6; }
+
+  .emg-card { max-width: 1080px; margin: 0 auto; padding: 0 16px 16px; }
+  @media (min-width: 1024px) { .emg-card { padding: 0 0 20px; } }
+  .emg-title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .emg-title::before { content: ''; width: 4px; height: 15px; background: var(--wine); border-radius: 2px; }
+  .emg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (min-width: 768px) { .emg-grid { grid-template-columns: repeat(4, 1fr); } }
+  .emg-item {
+    background: var(--wine-dark); color: #fff; border-radius: var(--r-md);
+    padding: 14px; display: flex; flex-direction: column; gap: 3px; position: relative;
+    transition: transform .15s, background .2s;
+  }
+  .emg-phone { position: absolute; top: 12px; right: 12px; opacity: .85; }
+  .emg-item:hover { background: var(--wine); transform: translateY(-1px); }
+  .emg-name { font-size: 13px; color: #C9B8BF; }
+  .emg-tel { font-size: 22px; font-weight: 800; letter-spacing: 0.5px; margin-top: 2px; }
+  .emg-note { font-size: 10px; color: #C9B8BF; margin-top: 4px; }
+
+  .links-list { display: grid; grid-template-columns: 1fr; gap: 14px; max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 768px) { .links-list { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 1024px) { .links-list { padding: 0; } }
+  .link-group { background: #fff; border-radius: var(--r-lg); padding: 16px; }
+  .link-group h2 { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .link-icon { background: var(--pink-soft); color: var(--wine); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+  .link-items { display: flex; flex-direction: column; gap: 8px; }
+  .link-item {
+    border: 1px solid var(--line-soft); border-radius: 10px; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .link-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .link-tel { font-size: 15px; font-weight: 700; color: var(--wine); font-variant-numeric: tabular-nums; }
+  .link-url { font-size: 12px; color: var(--ink-3); word-break: break-all; }
+  .link-actions { display: flex; gap: 8px; }
+  .link-actions a {
+    background: var(--pink-soft); color: var(--wine); font-size: 12px; font-weight: 600;
+    padding: 4px 12px; border-radius: 999px; transition: background .2s;
+  }
+  .link-actions a:hover { background: var(--pink); color: #fff; }
+  .link-note { font-size: 11px; color: var(--ink-3); }
+
+  .links-tip { text-align: center; font-size: 11px; color: var(--ink-3); padding: 20px 16px 40px; }
+</style>

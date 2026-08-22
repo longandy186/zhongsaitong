@@ -89,7 +89,8 @@ export async function onRequestGet({ request, env }) {
   // 2) 逐条更新 GitHub 文件
   const results = [];
   for (const tid of targets) {
-    const filePath = `src/content/items/${tid}.md`;
+    // 文件名含中文，必须 encodeURIComponent（路径分隔符 / 不受影响）
+    const filePath = `src/content/items/${encodeURIComponent(tid)}.md`;
     const api = `https://api.github.com/repos/${repo}/contents/${filePath}`;
     const headers = {
       Authorization: `Bearer ${token}`,

@@ -1,0 +1,117 @@
+---
+import { CATEGORY_LABEL } from '../data/site';
+import { itemUrl } from '../lib/itemUrl';
+import { cleanSummary } from '../lib/summary';
+import type { CollectionEntry } from 'astro:content';
+
+type Item = CollectionEntry<'items'>;
+interface Props {
+  item: Item;
+}
+const { item } = Astro.props;
+const { data, id } = item;
+const url = `https://zhongsaitong.pages.dev${itemUrl(item)}`;
+const summary = cleanSummary(item, 120);
+const org = { '@type': 'Organization', name: '中塞通' };
+
+function categorySchema() {
+  switch (data.category) {
+    case 'news':
+      return {
+        '@type': 'NewsArticle',
+        headline: data.title,
+        datePublished: data.date.toISOString(),
+        dateModified: data.date.toISOString(),
+        author: org,
+        publisher: org,
+        mainEntityOfPage: url,
+        description: summary,
+        ...(data.source ? { sourceOrganization: { '@type': 'Organization', name: data.source } } : {}),
+        ...(data.images[0] ? { image: [data.images[0]] } : {}),
+      };
+    case 'jobs':
+      return {
+        '@type': 'JobPosting',
+        title: data.title,
+        datePosted: data.date.toISOString().slice(0, 10),
+        validThrough: new Date(data.date.getTime() + 30 * 86400000).toISOString().slice(0, 10),
+        hiringOrganization: { '@type': 'Organization', name: data.source || '在塞企业' },
+        jobLocation: {
+          '@type': 'Place',
+          address: { '@type': 'PostalAddress', addressLocality: data.location || '贝尔格莱德', addressCountry: 'RS' },
+        },
+        employmentType: 'FULL_TIME',
+        description: summary,
+        ...(data.price
+          ? {
+              baseSalary: {
+                '@type': 'MonetaryAmount',
+                currency: 'EUR',
+                value: { '@type': 'QuantitativeValue', value: parseFloat(data.price.replace(/[^\d.]/g, '')) || undefined },
+              },
+            }
+          : {}),
+      };
+    case 'rentals':
+    case 'secondhand':
+    case 'supply':
+      return {
+        '@type': 'Product',
+        name: data.title,
+        description: summary,
+        image: data.images.length ? [data.images[0]] : undefined,
+        offers: data.price
+          ? {
+              '@type': 'Offer',
+              price: data.price.replace(/[^\d.]/g, ''),
+              priceCurrency: 'EUR',
+              availability: 'https://schema.org/InStock',
+              priceValidUntil: new Date(data.date.getTime() + 90 * 86400000).toISOString().slice(0, 10),
+              url,
+            }
+          : undefined,
+        ...(data.location
+          ? { additionalProperty: [{ '@type': 'PropertyValue', name: '位置', value: data.location }] }
+          : {}),
+      };
+    default:
+      return {
+        '@type': 'Article',
+        headline: data.title,
+        datePublished: data.date.toISOString(),
+        dateModified: data.date.toISOString(),
+        author: org,
+        publisher: org,
+        mainEntityOfPage: url,
+        description: summary,
+        isAccessibleForFree: true,
+        ...(data.images[0] ? { image: [data.images[0]] } : {}),
+      };
+  }
+}
+
+const mainSchema = {
+  '@context': 'https://schema.org',
+  '@id': url,
+  url,
+  ...categorySchema(),
+};
+
+const breadcrumb = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: '首页', item: 'https://zhongsaitong.pages.dev/' },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: CATEGORY_LABEL[data.category] ?? '信息',
+      item: `https://zhongsaitong.pages.dev/${data.category}/`,
+    },
+    { '@type': 'ListItem', position: 3, name: data.title },
+  ],
+};
+---
+
+<script type="application/ld+json" is:inline set:html={JSON.stringify(mainSchema)} />
+<script type="application/ld+json" is:inline set:html={JSON.stringify(breadcrumb)} />

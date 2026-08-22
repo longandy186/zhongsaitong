@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://zhongsaitong.pages.dev/sitemap-index.xml

@@ -1,53 +1,232 @@
 ---
 import Base from '../layouts/Base.astro';
 import Header from '../components/Header.astro';
-import StatusBar from '../components/StatusBar.astro';
 import AdBanner from '../components/AdBanner.astro';
 import FollowBar from '../components/FollowBar.astro';
+import StatusBar from '../components/StatusBar.astro';
 import NewsStream from '../components/NewsStream.astro';
 import TabBar from '../components/TabBar.astro';
 import Card from '../components/Card.astro';
 import FeaturedArticle from '../components/FeaturedArticle.astro';
-import CommunityCTA from '../components/CommunityCTA.astro';
-import FeedAd from '../components/FeedAd.astro';
+import CurrencyConverter from '../components/CurrencyConverter.astro';
 import { getCollection } from 'astro:content';
-import { FEED_AD_EVERY } from '../data/ads';
+import type { CollectionEntry } from 'astro:content';
+import { EMERGENCY_TELS } from '../data/links';
 
 const all = await getCollection('items');
-const items = all
-  .filter((i) => i.data.status === 'active')
-  .sort(
-    (a, b) =>
-      Number(b.data.featured) - Number(a.data.featured) ||
-      b.data.date.getTime() - a.data.date.getTime()
-  );
+const active = all.filter((i) => i.data.status === 'active');
+
+const dedup = new Map<string, CollectionEntry<'items'>>();
+for (const i of active) {
+  const key = `${i.data.source ?? ''}|${i.data.title.replace(/\s+/g, '')}`;
+  const prev = dedup.get(key);
+  if (!prev || i.data.date.getTime() > prev.data.date.getTime()) dedup.set(key, i);
+}
+const sorted = [...dedup.values()].sort(
+  (a, b) =>
+    Number(b.data.featured) - Number(a.data.featured) ||
+    b.data.date.getTime() - a.data.date.getTime()
+);
+
+const SEVEN_DAYS = 7 * 24 * 3600 * 1000;
+const todayNews = sorted
+  .filter((i) => i.data.category === 'news' && Date.now() - i.data.date.getTime() <= SEVEN_DAYS)
+  .slice(0, 6);
+const todayNewsIds = new Set(todayNews.map((i) => i.id));
+
+const PAGE = 12;
+const feedAll = sorted.filter((i) => !todayNewsIds.has(i.id));
+const items = feedAll.slice(0, PAGE);
+const hiddenItems = feedAll.slice(PAGE);
+const hasMore = hiddenItems.length > 0;
 ---
 
 <Base>
-  <Header />
+  <Header active="home" />
   <AdBanner />
-  <FollowBar />
-  <StatusBar />
-  <NewsStream />
-  <TabBar active="all" />
 
-  {
-    items.length === 0 ? (
-      <div class="empty">暂无信息，敬请期待</div>
-    ) : (
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+  <main class="page-main">
+    <div class="cols">
+      <div class="col-left">
+        <!-- 移动端顶部：公众号卡 + 天气汇率工具条（桌面隐藏，右栏替代） -->
+        <div class="mobile-only">
+          <FollowBar />
+          <StatusBar />
+        </div>
+
+        <NewsStream items={todayNews} />
+        <TabBar active="all" />
+
         {
-          items.map((item, idx) => (
-            <Fragment>
-              <Card item={item} />
-              {FEED_AD_EVERY > 0 && idx > 0 && (idx + 1) % FEED_AD_EVERY === 0 && <FeedAd />}
-            </Fragment>
-          ))
+          items.length === 0 ? (
+            <div class="empty">暂无信息，敬请期待</div>
+          ) : (
+            <div class="feed" id="feed">
+              {items.map((item) => <Card item={item} />)}
+              {hasMore && (
+                <Fragment>
+                  <div class="feed-hidden" id="feed-more">
+                    {hiddenItems.map((item) => <Card item={item} />)}
+                  </div>
+                  <button id="load-more" type="button" class="more-btn">
+                    查看更多 ({hiddenItems.length}) <span>→</span>
+                  </button>
+                </Fragment>
+              )}
+            </div>
+          )
         }
+
+        <!-- 移动端急用电话（放深度指南上方；桌面在右栏展示） -->
+        <div class="emg-mobile">
+          <div class="emg-card-head">
+            <span>急用电话</span>
+            <a href="/links/">查看全部 →</a>
+          </div>
+          <div class="emg-card-grid">
+            {
+              EMERGENCY_TELS.map((t) => (
+                <a class="emg-card-item" href="/links/">
+                  <span class="emg-card-name">{t.name}</span>
+                  <span class="emg-card-tel">{t.tel}</span>
+                  <svg class="emg-card-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </a>
+              ))
+            }
+          </div>
+        </div>
+
+        <FeaturedArticle />
       </div>
-    )
+
+      <aside class="col-right" aria-label="侧栏">
+        <CurrencyConverter compact />
+        <StatusBar />
+        <FollowBar />
+        <div class="quick">
+          <div class="quick-head">
+            <h3>快速入口</h3>
+            <a href="/news/">全部</a>
+          </div>
+          <div class="quick-grid">
+            <a class="quick-item" href="/rentals/">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M3 12L12 3l9 9M5 10v10h4v-6h6v6h4V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              找房
+            </a>
+            <a class="quick-item" href="/jobs/">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="7" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+                <path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M3 13h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              招工
+            </a>
+            <a class="quick-item" href="/news/?kind=embassy">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M4 21V5a2 2 0 012-2h12a2 2 0 012 2v16M4 21h16M9 9h6M9 13h6M9 17h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              使馆
+            </a>
+            <a class="quick-item" href="/news/?kind=chamber">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M17 21v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              商会
+            </a>
+          </div>
+        </div>
+
+        <div class="emg-card">
+          <div class="emg-card-head">
+            <span>常用电话及网站</span>
+            <a href="/links/">查看全部 →</a>
+          </div>
+          <div class="emg-card-grid">
+            {
+              EMERGENCY_TELS.map((t) => (
+                <a class="emg-card-item" href="/links/">
+                  <span class="emg-card-name">{t.name}</span>
+                  <span class="emg-card-tel">{t.tel}</span>
+                  <svg class="emg-card-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </a>
+              ))
+            }
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- 移动端悬浮按钮 -->
+  <a href="/publish/" class="fab" aria-label="发布信息">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    </svg>
+    <span>发布</span>
+  </a>
+</Base>
+
+<script is:inline>
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('load-more')?.addEventListener('click', () => {
+      document.getElementById('feed-more')?.classList.add('show');
+      document.getElementById('load-more')?.remove();
+    });
+  });
+</script>
+
+<style>
+  .cols { display: block; }
+  .col-right { display: none; }
+  .mobile-only { display: block; }
+  .emg-mobile { display: block; padding: 0 16px; }
+  .fab { display: flex; }
+
+  .col-left { display: flex; flex-direction: column; gap: 12px; }
+  .col-left .feed { padding: 0 16px 4px; }
+
+  @media (min-width: 1024px) {
+    .cols { display: flex; gap: 28px; max-width: 1280px; margin: 0 auto; padding: 20px 40px 16px; align-items: flex-start; }
+    .col-left { flex: 1; min-width: 0; }
+    .col-right { display: flex; flex-direction: column; gap: 16px; width: 320px; flex-shrink: 0; }
+    .mobile-only { display: none; }
+    .emg-mobile { display: none; }
+    .fab { display: none; }
   }
 
-  <FeaturedArticle />
-  <CommunityCTA />
-</Base>
+  .feed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (min-width: 1024px) { .feed { grid-template-columns: repeat(3, 1fr); gap: 18px; padding: 0; } }
+  .feed-hidden { display: none; }
+  .feed-hidden.show { display: contents; }
+  .more-btn { display: block; text-align: center; margin: 12px 16px 0; padding: 13px; border-radius: 14px; background: #fff; border: 0; color: var(--wine); font-weight: 600; font-size: 14px; }
+  .more-btn:active { transform: scale(0.97); }
+  @media (min-width: 1024px) { .more-btn { margin: 0; } }
+
+  .emg-card { display: block; background: #fff; border-radius: var(--r-lg); padding: 16px; }
+  .emg-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .emg-card-head span { font-size: 13px; font-weight: 700; }
+  .emg-card-head a { font-size: 11px; color: var(--wine); }
+  .emg-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .emg-card-item { background: var(--wine-dark); color: #fff; border-radius: 10px; padding: 10px 36px 10px 10px; display: flex; flex-direction: column; gap: 2px; position: relative; transition: background .2s, transform .15s; }
+  .emg-card-arrow { position: absolute; top: 12px; right: 12px; opacity: .85; }
+  .emg-card-item:hover { background: var(--wine); transform: translateY(-1px); }
+  .emg-card-name { font-size: 11px; color: #C9B8BF; }
+  .emg-card-tel { font-size: 16px; font-weight: 800; }
+
+  .quick { background: #fff; border-radius: var(--r-lg); padding: 18px; }
+  .quick-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .quick-head h3 { font-size: 13px; font-weight: 700; }
+  .quick-head a { font-size: 10px; color: var(--wine); }
+  .quick-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .quick-item { background: #F5EFEE; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; color: var(--ink); transition: all .2s; }
+  .quick-item:hover { background: var(--pink-soft); color: var(--wine); transform: translateY(-1px); }
+  .quick-item svg { color: var(--wine); }
+
+  .fab { position: fixed; right: 16px; bottom: 24px; height: 48px; padding: 0 18px 0 16px; border-radius: 24px; background: var(--pink); color: #fff; display: flex; align-items: center; gap: 6px; box-shadow: var(--shadow-fab); z-index: 80; font-size: 14px; font-weight: 600; transition: all .2s; }
+  .fab:hover { background: #E83A5A; transform: translateY(-2px); }
+</style>

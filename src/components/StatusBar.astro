@@ -1,59 +1,63 @@
 ---
-const today = new Date();
-const dateLabel = `${today.getMonth() + 1}月${today.getDate()}日`;
 ---
 
-<aside class="status-bar" aria-label="天气与汇率">
-  <div class="ss-section ss-wx">
-    <div class="ss-wx-main" id="wx-temp">—°</div>
-    <div class="ss-wx-meta">
-      <span class="ss-wx-cond" id="wx-cond">天气</span>
-      <span class="ss-wx-city" id="wx-city">贝尔格莱德</span>
+<div class="tools">
+  <div class="tools-head">
+    <div class="tools-temp" data-bind="temp">—°</div>
+    <div class="tools-info">
+      <div class="tools-l1" data-bind="city">多云 · 贝尔格莱德</div>
+      <div class="tools-l2" data-bind="meta">风 — · 湿度 —</div>
+      <div class="tools-dress" data-bind="dress">穿衣指数：—</div>
     </div>
-    <div class="ss-wx-extra" id="wx-extra">
-      <span class="ss-extra-item">风 <em id="wx-wind">—</em></span>
-      <span class="ss-extra-item">湿 <em id="wx-humid">—</em></span>
-    </div>
-  </div>
-
-  <div class="ss-divider"></div>
-
-  <div class="ss-section ss-fx">
-    <div class="ss-fx-row">
-      <span class="ss-fx-flag">¥</span>
-      <span class="ss-fx-label">RSD</span>
-      <span class="ss-fx-value" id="fx-rsd">—</span>
-    </div>
-    <div class="ss-fx-row">
-      <span class="ss-fx-flag">¥</span>
-      <span class="ss-fx-label">EUR</span>
-      <span class="ss-fx-value" id="fx-eur">—</span>
+    <div class="tools-up">
+      <div class="up-t1" data-bind="update-label">每日 8:00</div>
+      <div class="up-t2">自动更新</div>
     </div>
   </div>
-</aside>
+  <a href="/tools/scan/" class="scan-btn">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+      <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+      <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+      <path d="M14 14h3v3h-3zM20 14h1M14 20h1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    扫价签帮你算价格
+  </a>
+</div>
 
 <script>
-  const WMO = {
-    0: '晴', 1: '基本晴', 2: '多云', 3: '阴',
-    45: '雾', 48: '雾凇',
-    51: '毛毛雨', 53: '毛毛雨', 55: '毛毛雨',
+  const WMO: Record<number, string> = {
+    0: '晴', 1: '大致晴朗', 2: '多云', 3: '阴',
+    45: '有雾', 48: '雾凇',
+    51: '小毛毛雨', 53: '毛毛雨', 55: '大毛毛雨',
     61: '小雨', 63: '中雨', 65: '大雨',
     71: '小雪', 73: '中雪', 75: '大雪',
-    80: '阵雨', 81: '阵雨', 82: '强阵雨',
-    95: '雷雨', 96: '雷雨冰雹', 99: '雷雨冰雹',
+    80: '阵雨', 81: '强阵雨', 82: '猛烈阵雨',
+    95: '雷阵雨', 96: '雷阵雨伴冰雹', 99: '强雷暴',
   };
+  function bind(name: string) {
+    return document.querySelectorAll(`[data-bind="${name}"]`);
+  }
+  function windLevel(kmh: number): string {
+    if (kmh < 1) return '0级 无风';
+    if (kmh < 6) return '1级 软风';
+    if (kmh < 12) return '2级 轻风';
+    if (kmh < 20) return '3级 微风';
+    if (kmh < 29) return '4级 和风';
+    if (kmh < 39) return '5级 清风';
+    if (kmh < 50) return '6级 强风';
+    return '7级+ 大风';
+  }
+  function dressIndex(temp: number): string {
+    if (temp >= 30) return '清凉夏装：短袖/短裤/防晒';
+    if (temp >= 25) return '短袖/薄长裤';
+    if (temp >= 20) return '长袖/薄外套';
+    if (temp >= 15) return '卫衣/夹克';
+    if (temp >= 10) return '厚外套/毛衣';
+    if (temp >= 5) return '大衣/加绒';
+    return '羽绒服';
+  }
   async function loadStatus() {
-    // 汇率：open.er-api.com 免费无 Key
-    try {
-      const r = await fetch('https://open.er-api.com/v6/latest/CNY');
-      const d = await r.json();
-      const rsd = d?.rates?.RSD;
-      const eur = d?.rates?.EUR;
-      if (rsd) document.getElementById('fx-rsd').textContent = rsd.toFixed(2);
-      if (eur) document.getElementById('fx-eur').textContent = eur.toFixed(4);
-    } catch {
-      /* 降级 */
-    }
     // 天气：open-meteo 免费无 Key，贝尔格莱德，含湿度风速
     try {
       const url =
@@ -66,49 +70,50 @@ const dateLabel = `${today.getMonth() + 1}月${today.getDate()}日`;
       const d = await r.json();
       const c = d?.current_weather;
       if (c) {
-        document.getElementById('wx-temp').textContent = `${Math.round(c.temperature)}°`;
-        document.getElementById('wx-cond').textContent = WMO[c.weathercode] ?? '天气';
-        document.getElementById('wx-wind').textContent = `${Math.round(c.windspeed)} km/h`;
-        // 湿度：取当前小时
+        bind('temp').forEach((el) => (el.textContent = `${Math.round(c.temperature)}°`));
+        const cond = WMO[c.weathercode] ?? '多云';
+        bind('city').forEach((el) => (el.textContent = `${cond} · 贝尔格莱德`));
+        const windKmh = Math.round(c.windspeed);
         const now = new Date();
-        const idx = d.hourly?.time?.findIndex((t) => t === now.toISOString().slice(0, 13) + ':00');
+        const idx = d.hourly?.time?.findIndex((t: string) => t === now.toISOString().slice(0, 13) + ':00');
         const humid = idx != null && idx >= 0 ? d.hourly.relativehumidity_2m[idx] : null;
-        if (humid != null) document.getElementById('wx-humid').textContent = `${Math.round(humid)}%`;
+        const metaTxt = `风力 ${windLevel(windKmh)}${humid != null ? ` · 湿度 ${Math.round(humid)}%` : ''}`;
+        bind('meta').forEach((el) => (el.textContent = metaTxt));
+        bind('dress').forEach((el) => (el.textContent = `穿衣指数：${dressIndex(c.temperature)}`));
       }
-    } catch {
-      /* 降级 */
-    }
+    } catch { /* 降级 */ }
   }
   loadStatus();
 </script>
 
 <style>
-  .status-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+  .tools {
+    margin: 10px 16px 0;
+    background: #fff;
+    border-radius: var(--r-lg);
+    padding: 14px;
+  }
+  @media (min-width: 1024px) { .tools { margin: 0; padding: 18px; border-radius: var(--r-lg); } }
+  .tools-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+  .tools-temp { font-size: 30px; font-weight: 700; color: var(--wine); line-height: 1; flex-shrink: 0; }
+  .tools-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .tools-l1 { font-size: 14px; font-weight: 600; }
+  .tools-l2 { font-size: 11px; color: var(--ink-3); }
+  .tools-dress { font-size: 11px; color: var(--wine); font-weight: 600; }
+  .tools-up { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
+  .up-t1 { font-size: 10px; font-weight: 600; color: var(--wine); }
+  .up-t2 { font-size: 9px; color: var(--ink-3); }
+  .scan-btn {
+    margin-top: 10px;
+    width: 100%;
+    background: var(--ink);
+    color: #fff;
+    border-radius: var(--r-md);
     padding: 10px 14px;
-    margin: 0 0 12px;
-    box-shadow: 0 1px 0 rgba(26,26,46,0.03);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    font-size: 13px; font-weight: 600;
+    transition: background .2s;
   }
-  .ss-section { display: flex; align-items: center; gap: 8px; }
-  .ss-wx { flex: 1; min-width: 0; gap: 10px; }
-  .ss-wx-main { font-size: 24px; font-weight: 800; color: var(--ink); letter-spacing: -1px; line-height: 1; }
-  .ss-wx-meta { display: flex; flex-direction: column; gap: 1px; }
-  .ss-wx-cond { font-size: 13px; font-weight: 600; color: var(--ink); }
-  .ss-wx-city { font-size: 11px; color: var(--ash); }
-  .ss-wx-extra { display: flex; flex-direction: column; gap: 1px; margin-left: auto; font-size: 11px; color: var(--ash); }
-  .ss-extra-item em { font-style: normal; color: var(--charcoal); font-weight: 600; }
-  .ss-divider { width: 1px; height: 28px; background: var(--border); }
-  .ss-fx { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
-  .ss-fx-row { display: flex; align-items: center; gap: 5px; font-size: 12px; }
-  .ss-fx-flag { font-size: 10px; color: var(--crimson); font-weight: 700; }
-  .ss-fx-label { color: var(--ash); font-weight: 600; }
-  .ss-fx-value { color: var(--ink); font-weight: 700; }
-  @media (max-width: 380px) {
-    .ss-wx-extra { display: none; }
-  }
+  .scan-btn:hover { background: #2D2638; }
+  @media (min-width: 1024px) { .scan-btn { margin-top: 14px; } }
 </style>

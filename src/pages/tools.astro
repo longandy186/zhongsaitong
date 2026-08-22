@@ -1,0 +1,239 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import CurrencyConverter from '../components/CurrencyConverter.astro';
+import { PHRASES, PHRASE_GROUPS } from '../data/phrases';
+---
+
+<Base title="工具 · 中塞通">
+  <Header active="tools" />
+
+  <section class="page-hero">
+    <h1>工具</h1>
+    <p>汇率换算 · 中塞时差 · 常用语速查 · 天气预报，一个就够</p>
+  </section>
+
+  <div class="tools-grid">
+    <!-- 汇率换算 -->
+    <section class="tool-card" aria-label="汇率换算">
+      <h2 class="tool-card-title">汇率换算</h2>
+      <CurrencyConverter />
+    </section>
+
+    <!-- 中塞时差 -->
+    <section class="tool-card" aria-label="中塞时差">
+      <h2 class="tool-card-title">中塞时差</h2>
+      <div class="clock-row">
+        <div class="clock">
+          <div class="clock-city">贝尔格莱德</div>
+          <div class="clock-time" id="t-bg">--:--</div>
+          <div class="clock-date" id="d-bg">----</div>
+        </div>
+        <div class="clock clock-beijing">
+          <div class="clock-city">北京</div>
+          <div class="clock-time" id="t-bj">--:--</div>
+          <div class="clock-date" id="d-bj">----</div>
+        </div>
+      </div>
+      <div class="clock-diff" id="clock-diff">北京比贝尔格莱德快 -- 小时</div>
+    </section>
+
+    <!-- 常用语速查 -->
+    <section class="tool-card tool-phrases" aria-label="常用语速查">
+      <h2 class="tool-card-title">常用语速查</h2>
+      <input class="phrase-search" id="phrase-search" type="search" placeholder="搜索 中文 / 塞尔维亚语 / 发音…" autocomplete="off" />
+      <div class="phrase-list" id="phrase-list">
+        {
+          PHRASE_GROUPS.map((grp) => (
+            <div class="phrase-group" data-grp={grp}>
+              <h3>{grp}</h3>
+              {
+                PHRASES.filter((p) => p.grp === grp).map((p) => (
+                  <div class="phrase-row">
+                    <span class="ph-zh">{p.zh}</span>
+                    <span class="ph-sr">{p.sr}</span>
+                    <span class="ph-ph">{p.ph}</span>
+                  </div>
+                ))
+              }
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- 48h 天气 -->
+    <section class="tool-card" aria-label="48小时预报">
+      <h2 class="tool-card-title">贝尔格莱德 48 小时预报</h2>
+      <div class="w48" id="w48">加载中…</div>
+    </section>
+  </div>
+
+  <div class="tool-links">
+    <a href="/links/">常用电话 / 网址索引</a>
+    <a href="/tools/scan/">扫价签 · 帮你算价格</a>
+  </div>
+</Base>
+
+<script>
+  // ===== 中塞时差（Intl 双时钟，自动处理夏令时） =====
+  (function () {
+    const tBg = document.getElementById('t-bg');
+    const dBg = document.getElementById('d-bg');
+    const tBj = document.getElementById('t-bj');
+    const dBj = document.getElementById('d-bj');
+    const diff = document.getElementById('clock-diff');
+    if (!tBg) return;
+    const fTime = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Europe/Belgrade', hour: '2-digit', minute: '2-digit', hour12: false });
+    const fDate = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Europe/Belgrade', month: '2-digit', day: '2-digit' });
+    const fTimeBj = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false });
+    const fDateBj = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit' });
+    function tzOffset(tz: string): number {
+      const d = new Date();
+      const utc = d.getTime() + d.getTimezoneOffset() * 60000;
+      const loc = new Date(d.toLocaleString('en-US', { timeZone: tz }));
+      return Math.round((loc.getTime() - utc) / 3600000);
+    }
+    function tick() {
+      const now = new Date();
+      tBg.textContent = fTime.format(now);
+      dBg.textContent = fDate.format(now);
+      tBj.textContent = fTimeBj.format(now);
+      dBj.textContent = fDateBj.format(now);
+      const h = tzOffset('Asia/Shanghai') - tzOffset('Europe/Belgrade');
+      diff.textContent = `北京比贝尔格莱德快 ${h} 小时${h >= 6 && h <= 7 ? '（夏令时/冬令时自动识别）' : ''}`;
+    }
+    tick();
+    setInterval(tick, 10000);
+  })();
+
+  // ===== 常用语搜索 =====
+  (function () {
+    const input = document.getElementById('phrase-search');
+    const list = document.getElementById('phrase-list');
+    if (!input || !list) return;
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      list.querySelectorAll('.phrase-group').forEach((grp) => {
+        let shown = 0;
+        grp.querySelectorAll('.phrase-row').forEach((row) => {
+          const text = row.textContent ?? '';
+          const ok = !q || text.toLowerCase().includes(q);
+          (row as HTMLElement).style.display = ok ? '' : 'none';
+          if (ok) shown++;
+        });
+        (grp as HTMLElement).style.display = shown ? '' : 'none';
+      });
+    });
+  })();
+
+  // ===== 48 小时预报（open-meteo hourly，每 6h 取 8 点） =====
+  (function () {
+    const w48 = document.getElementById('w48');
+    if (!w48) return;
+    const WMO: Record<number, string> = {
+      0: '晴', 1: '大致晴朗', 2: '多云', 3: '阴', 45: '有雾', 48: '雾凇',
+      51: '毛毛雨', 53: '毛毛雨', 55: '毛毛雨', 61: '小雨', 63: '中雨', 65: '大雨',
+      71: '小雪', 73: '中雪', 75: '大雪', 80: '阵雨', 81: '强阵雨', 82: '猛烈阵雨',
+      95: '雷阵雨', 96: '雷阵雨伴冰雹', 99: '强雷暴',
+    };
+    function windLevel(kmh: number): string {
+      if (kmh < 1) return '无风';
+      if (kmh < 6) return '软风';
+      if (kmh < 12) return '轻风';
+      if (kmh < 20) return '微风';
+      if (kmh < 29) return '和风';
+      if (kmh < 39) return '清风';
+      return '强风';
+    }
+    async function load() {
+      try {
+        const url =
+          'https://api.open-meteo.com/v1/forecast' +
+          '?latitude=44.7866&longitude=20.4489' +
+          '&hourly=temperature_2m,weather_code,wind_speed_10m' +
+          '&forecast_days=2&timezone=Europe/Belgrade';
+        const r = await fetch(url);
+        const d = await r.json();
+        const times: string[] = d.hourly.time;
+        const temps: number[] = d.hourly.temperature_2m;
+        const codes: number[] = d.hourly.weather_code;
+        const winds: number[] = d.hourly.wind_speed_10m;
+        // 从下一个整点开始，每 6h 取 1 个点，共 8 点
+        const start = times.findIndex((t: string) => new Date(t).getTime() > Date.now());
+        const idx = start < 0 ? 0 : start;
+        const rows = [];
+        for (let i = 0; i < 8; i++) {
+          const p = idx + i * 6;
+          if (p >= times.length) break;
+          const dt = new Date(times[p]);
+          const label = `${dt.getMonth() + 1}/${dt.getDate()} ${String(dt.getHours()).padStart(2, '0')}:00`;
+          const wx = WMO[codes[p]] ?? '多云';
+          rows.push(
+            `<div class="w48-row"><span class="w48-t">${label}</span><span class="w48-d">${wx}</span><span class="w48-temp">${Math.round(temps[p])}°</span><span class="w48-w">${windLevel(winds[p])}</span></div>`
+          );
+        }
+        w48.innerHTML = rows.join('');
+      } catch {
+        w48.textContent = '预报加载失败';
+      }
+    }
+    load();
+  })();
+</script>
+
+<style>
+  .page-hero { padding: 24px 16px 16px; max-width: 1080px; margin: 0 auto; }
+  @media (min-width: 1024px) { .page-hero { padding: 36px 0 20px; } }
+  .page-hero h1 { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
+  .page-hero p { font-size: 13px; color: var(--ink-2); margin-top: 6px; }
+
+  .tools-grid { display: grid; grid-template-columns: 1fr; gap: 14px; max-width: 1080px; margin: 0 auto; padding: 0 16px 20px; }
+  @media (min-width: 768px) { .tools-grid { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 1024px) { .tools-grid { padding: 0 0 24px; } }
+  .tool-card { background: #fff; border-radius: var(--r-lg); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .tool-card-title { font-size: 15px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .tool-card-title::before { content: ''; width: 4px; height: 15px; background: var(--wine); border-radius: 2px; }
+  .tool-phrases { grid-column: 1 / -1; }
+
+  /* 时差 */
+  .clock-row { display: flex; gap: 12px; }
+  .clock { flex: 1; background: var(--wine-dark); color: #fff; border-radius: var(--r-md); padding: 14px; text-align: center; }
+  .clock-beijing { background: #3A2430; }
+  .clock-city { font-size: 11px; color: #C9B8BF; }
+  .clock-time { font-size: 30px; font-weight: 800; letter-spacing: 1px; margin: 4px 0; font-variant-numeric: tabular-nums; }
+  .clock-date { font-size: 11px; color: #C9B8BF; }
+  .clock-diff { font-size: 13px; font-weight: 600; color: var(--wine); text-align: center; padding-top: 4px; }
+
+  /* 常用语 */
+  .phrase-search {
+    padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px;
+    font-size: 13px; color: var(--ink); background: #FAF8F5; outline: none;
+  }
+  .phrase-search:focus { border-color: var(--wine); box-shadow: 0 0 0 3px var(--pink-soft); }
+  .phrase-list { display: flex; flex-direction: column; gap: 16px; }
+  .phrase-group h3 { font-size: 13px; font-weight: 700; color: var(--wine); margin-bottom: 8px; }
+  .phrase-row {
+    display: grid; grid-template-columns: 90px 1fr 1fr; gap: 8px;
+    padding: 8px 4px; border-bottom: 1px solid var(--line-soft); font-size: 13px;
+  }
+  .phrase-row .ph-zh { font-weight: 600; color: var(--ink); }
+  .phrase-row .ph-sr { color: var(--ink-2); }
+  .phrase-row .ph-ph { color: var(--ink-3); }
+
+  /* 48h 预报 */
+  .w48 { display: flex; flex-direction: column; gap: 6px; }
+  .w48-row { display: grid; grid-template-columns: 1fr 1fr 60px 80px; gap: 8px; padding: 8px 10px; background: #FAF8F5; border-radius: 8px; font-size: 13px; }
+  .w48-t { color: var(--ink-2); }
+  .w48-d { font-weight: 600; color: var(--ink); }
+  .w48-temp { font-weight: 800; color: var(--wine); text-align: right; }
+  .w48-w { color: var(--ink-3); }
+
+  .tool-links { display: flex; gap: 10px; flex-wrap: wrap; max-width: 1080px; margin: 0 auto; padding: 0 16px 40px; }
+  @media (min-width: 1024px) { .tool-links { padding: 0 0 48px; } }
+  .tool-links a {
+    background: var(--pink); color: #fff; border-radius: 999px; padding: 10px 20px;
+    font-size: 13px; font-weight: 600; transition: background .2s, transform .15s;
+  }
+  .tool-links a:hover { background: #E83A5A; transform: translateY(-1px); }
+</style>

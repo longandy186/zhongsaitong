@@ -3,7 +3,7 @@ export const SITE = {
   name: '中塞通',
   tagline: '塞尔维亚华人信息平台',
   description: '面向塞尔维亚华人的信息服务平台：租房、二手、招聘、中塞新闻、生活指南、供求对接',
-  url: 'https://your-domain.com',
+  url: 'https://zhongsaitong.pages.dev',
   email: 'contact@your-domain.com',
 };
 
@@ -36,14 +36,14 @@ export const NEWS_KINDS = [
   { key: 'news', label: '中塞要闻' },
 ];
 
-// 类型色块
+// 类型色块（v2 五色标签系统）
 export const TYPE_STYLE: Record<string, { label: string; bg: string; color: string }> = {
-  rentals: { label: '租', bg: 'rgba(233,69,96,0.12)', color: '#E94560' },
-  secondhand: { label: '卖', bg: 'rgba(0,184,148,0.12)', color: '#00B894' },
-  jobs: { label: '招', bg: 'rgba(9,132,227,0.12)', color: '#0984E3' },
-  news: { label: '讯', bg: 'rgba(253,203,110,0.18)', color: '#B8860B' },
-  guide: { label: '指', bg: 'rgba(26,26,46,0.08)', color: '#1A1A2E' },
-  supply: { label: '求', bg: 'rgba(233,69,96,0.08)', color: '#C23648' },
+  rentals: { label: '租', bg: 'rgba(39,174,96,0.12)', color: '#27AE60' },     // 租房 → 绿
+  secondhand: { label: '卖', bg: 'rgba(234,88,12,0.12)', color: '#EA580C' },  // 买卖 → 橙
+  jobs: { label: '招', bg: 'rgba(142,68,173,0.12)', color: '#8E44AD' },       // 招聘 → 紫
+  news: { label: '讯', bg: 'rgba(123,30,59,0.12)', color: '#7B1E3B' },        // 新闻 → 酒红
+  guide: { label: '指', bg: 'rgba(123,30,59,0.12)', color: '#7B1E3B' },       // 指南 → 酒红
+  supply: { label: '求', bg: 'rgba(142,68,173,0.12)', color: '#8E44AD' },     // 供求 → 紫
 };
 
 // 公众号 / 视频号（二维码图片放 public/images/，注册后替换）

@@ -1,0 +1,175 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+
+const faqs = [
+  {
+    q: '中国公民去塞尔维亚需要签证吗？',
+    a: '不需要。持中国普通护照可免签入境塞尔维亚，每次停留不超过30天。免签仅限旅游、商务等短期停留；工作、学习、长期居留仍需办理相应签证和居留许可。',
+    src: '中国驻塞尔维亚使馆',
+    updated: '2026-08-22',
+  },
+  {
+    q: '免签能待多久？可以在塞尔维亚工作吗？',
+    a: '每次停留不超过30天。免签仅限旅游/商务短期停留，不可以工作；工作须先获得工作许可，再申请临时居留。',
+    src: '中国驻塞尔维亚使馆',
+    updated: '2026-08-22',
+  },
+  {
+    q: '人民币兑换塞尔维亚第纳尔的汇率是多少？',
+    a: '汇率每日 8:00 自动更新，实时汇率请查看中塞通汇率工具。参考行情：¥1 ≈ 14.9 RSD、¥1 ≈ 0.127 €（以当日实时汇率为准）。',
+    src: '中塞通汇率工具',
+    updated: '2026-08-22',
+  },
+  {
+    q: '在贝尔格莱德租一个两室一厅大概多少钱？',
+    a: '泽蒙区带家具两室一厅月租约700欧元；新贝、市中心价格略高。具体房源实时更新于中塞通租房频道。',
+    src: '中塞通租房频道',
+    updated: '2026-08-22',
+  },
+  {
+    q: '塞尔维亚使用什么货币？',
+    a: '官方货币为塞尔维亚第纳尔（RSD，dinar）。欧元在部分商家也接受，但找零通常给第纳尔。',
+    src: '公开资料',
+    updated: '2026-08-22',
+  },
+  {
+    q: '塞尔维亚的官方语言是什么？',
+    a: '官方语言为塞尔维亚语（西里尔字母为主，部分地区通用拉丁字母）。英语在年轻人和旅游区较通用。',
+    src: '公开资料',
+    updated: '2026-08-22',
+  },
+  {
+    q: '中国驾照在塞尔维亚能直接使用吗？',
+    a: '短期旅游可使用中国驾照配合国际驾照认证翻译件；长期居留建议办理驾照换发或参加当地考试。请以当地交管部门规定为准。',
+    src: '公开资料',
+    updated: '2026-08-22',
+  },
+  {
+    q: '塞尔维亚和北京的时差是多少？',
+    a: '塞尔维亚夏令时（约3月底-10月底）为 UTC+2，与北京相差6小时；冬令时（UTC+1）相差7小时。',
+    src: '公开资料',
+    updated: '2026-08-22',
+  },
+  {
+    q: '在塞尔维亚哪里能买中国商品、找中国超市？',
+    a: '贝尔格莱德70号商城是华人集中的商贸区，汇集中国商品、餐饮、超市与物流；许多华商也通过微信群发布货源信息。',
+    src: '中塞通供求频道',
+    updated: '2026-08-22',
+  },
+  {
+    q: '中国孩子能在贝尔格莱德上学吗？',
+    a: '可以。可申请当地公立学校（需居留许可+语言基础），或国际学校（英文授课，学费较高）。具体流程建议咨询当地教育局或学校。',
+    src: '公开资料',
+    updated: '2026-08-22',
+  },
+  {
+    q: '中塞自贸协定对贸易有什么利好？',
+    a: '中塞自贸协定生效后，部分商品关税逐步降为零，进出口企业可享受关税减免。具体商品清单和原产地规则以海关公告为准。',
+    src: '公开资料',
+    updated: '2026-08-22',
+  },
+  {
+    q: '在塞尔维亚生病怎么办？有医保吗？',
+    a: '短期游客建议购买旅行医疗保险；长期居留者需参加当地社保/医保体系。紧急情况可拨打急救电话194。',
+    src: '公开资料',
+    updated: '2026-08-22',
+  },
+  {
+    q: '塞尔维亚安全吗？',
+    a: '塞尔维亚整体治安良好，贝尔格莱德是较安全的欧洲首都之一。仍建议保管好护照财物，避免夜间前往偏僻区域。',
+    src: '公开资料',
+    updated: '2026-08-22',
+  },
+  {
+    q: '从中国往塞尔维亚寄快递要多久？',
+    a: '国际快递（EMS/DHL 等）通常5-10个工作日；海运/铁路拼箱较慢（数周）。70号商城周边有华人物流公司可代收转运。',
+    src: '公开资料',
+    updated: '2026-08-22',
+  },
+  {
+    q: '回国能带多少塞尔维亚特产？免税额度多少？',
+    a: '中国居民进境免税额度为5000元人民币/次（超额部分需申报缴税），具体以海关最新规定为准。',
+    src: '中国海关',
+    updated: '2026-08-22',
+  },
+];
+
+const faqJson = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: faqs.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: f.a },
+  })),
+};
+---
+
+<Base title="常见问题 · 中塞通">
+  <Header />
+
+  <script type="application/ld+json" is:inline set:html={JSON.stringify(faqJson)} />
+
+  <section class="page-hero">
+    <h1>常见问题</h1>
+    <p>在塞华人最高频的问题与答案，覆盖签证、居留、汇率、租房、生活指南。信息均标注来源与更新时间。</p>
+  </section>
+
+  <div class="faq-list">
+    {faqs.map((f) => (
+      <details class="faq-item">
+        <summary>{f.q}</summary>
+        <div class="faq-body">
+          <p class="faq-a">{f.a}</p>
+          <div class="faq-meta">来源：{f.src} · 更新：{f.updated}</div>
+        </div>
+      </details>
+    ))}
+  </div>
+
+  <div class="faq-more">
+    没找到答案？<a href="/search/">搜索全站</a> 或 <a href="/guide/">查看生活指南</a>
+  </div>
+</Base>
+
+<style>
+  .page-hero { padding: 24px 16px 16px; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; }
+  @media (min-width: 1024px) { .page-hero { padding: 36px 0 20px; } }
+  .page-hero h1 { font-size: 26px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
+  .page-hero p { font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+
+  .faq-list { display: flex; flex-direction: column; gap: 10px; max-width: 760px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 1024px) { .faq-list { padding: 0; } }
+  .faq-item {
+    background: #fff; border: 1px solid var(--line); border-radius: var(--r-md);
+    overflow: hidden;
+    transition: box-shadow .2s;
+  }
+  .faq-item:hover { box-shadow: var(--shadow-sm); }
+  .faq-item[open] { border-color: var(--wine); box-shadow: var(--shadow-sm); }
+  .faq-item summary {
+    display: flex; align-items: center; gap: 10px;
+    padding: 15px 16px;
+    font-size: 14px; font-weight: 600; color: var(--ink);
+    cursor: pointer; list-style: none;
+  }
+  .faq-item summary::-webkit-details-marker { display: none; }
+  .faq-item summary::before {
+    content: '';
+    width: 4px; height: 16px; border-radius: 2px;
+    background: var(--wine); flex-shrink: 0;
+  }
+  .faq-item summary::after {
+    content: '+';
+    margin-left: auto; font-size: 18px; color: var(--wine);
+    transition: transform .2s;
+  }
+  .faq-item[open] summary::after { transform: rotate(45deg); }
+  .faq-body { padding: 0 16px 16px 30px; display: flex; flex-direction: column; gap: 8px; }
+  .faq-a { font-size: 14px; color: var(--ink-2); line-height: 1.8; }
+  .faq-meta { font-size: 11px; color: var(--ink-4); }
+
+  .faq-more { text-align: center; padding: 24px 16px 40px; font-size: 13px; color: var(--ink-2); }
+  .faq-more a { color: var(--wine); font-weight: 600; }
+</style>
