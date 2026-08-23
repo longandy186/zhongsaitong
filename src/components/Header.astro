@@ -141,6 +141,8 @@ const mobileNav = [...nav, { key: 'publish', label: '发布信息', href: '/publ
 
   /* 移动端下拉菜单：桌面隐藏 */
   .mobile-menu { display: flex; flex-direction: column; }
+  /* hidden 属性必须强制覆盖 display:flex，否则初始状态就可见 */
+  .mobile-menu[hidden] { display: none; }
   .mobile-menu a {
     padding: 13px 20px; font-size: 15px; color: var(--ink-2, #5A5861);
     border-top: 1px solid var(--line-soft, #EFEDEA);
