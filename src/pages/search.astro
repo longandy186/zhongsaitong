@@ -60,20 +60,20 @@ const active = all
 
 <script is:inline>
   document.addEventListener('DOMContentLoaded', () => {
-    const input = document.getElementById('search-input') as HTMLInputElement | null;
-    const meta = document.getElementById('search-meta') as HTMLElement | null;
-    const emptyBox = document.getElementById('search-empty') as HTMLElement | null;
-    const emptyText = document.getElementById('empty-text') as HTMLElement | null;
-    const feed = document.getElementById('search-feed') as HTMLElement | null;
-    const moreBtn = document.getElementById('load-more') as HTMLButtonElement | null;
+    const input = document.getElementById('search-input');
+    const meta = document.getElementById('search-meta');
+    const emptyBox = document.getElementById('search-empty');
+    const emptyText = document.getElementById('empty-text');
+    const feed = document.getElementById('search-feed');
+    const moreBtn = document.getElementById('load-more');
     if (!input || !feed) return;
 
-    const cards = Array.from(feed.querySelectorAll<HTMLElement>('.card'));
+    const cards = Array.from(feed.querySelectorAll('.card'));
     const PAGE = 12;
     let shown = PAGE;
     let currentQ = '';
 
-    function applySearch(rawQ: string) {
+    function applySearch(rawQ) {
       const q = rawQ.trim().toLowerCase();
       currentQ = q;
       // 命中过滤（data-search 已含标题/正文/位置/价格，小写去空白）
@@ -118,14 +118,16 @@ const active = all
     });
 
     // 表单提交走 GET（保留 URL 可分享），阻止默认由浏览器带参跳转即可
-    const form = document.getElementById('search-form') as HTMLFormElement | null;
-    form?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      applySearch(input.value);
-    });
+    const form = document.getElementById('search-form');
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        applySearch(input.value);
+      });
+    }
 
     // 建议词点击即搜
-    document.querySelectorAll<HTMLButtonElement>('[data-suggest]').forEach((b) => {
+    document.querySelectorAll('[data-suggest]').forEach((b) => {
       b.addEventListener('click', () => {
         input.value = b.dataset.suggest ?? '';
         applySearch(input.value);
@@ -134,16 +136,18 @@ const active = all
     });
 
     // 查看更多
-    moreBtn?.addEventListener('click', () => {
-      shown += PAGE;
-      let shownCount = 0;
-      cards.forEach((c) => {
-        if (c.style.display === 'none') return;
-        shownCount++;
-        c.style.display = shownCount > shown ? 'none' : '';
+    if (moreBtn) {
+      moreBtn.addEventListener('click', () => {
+        shown += PAGE;
+        let shownCount = 0;
+        cards.forEach((c) => {
+          if (c.style.display === 'none') return;
+          shownCount++;
+          c.style.display = shownCount > shown ? 'none' : '';
+        });
+        moreBtn.hidden = shownCount <= shown;
       });
-      if (moreBtn) moreBtn.hidden = shownCount <= shown;
-    });
+    }
   });
 </script>
 

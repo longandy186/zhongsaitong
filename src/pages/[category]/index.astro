@@ -92,10 +92,10 @@ const isNews = category === 'news';
     // 新闻子分类筛选（仅 /news/ 页生效）
     const kinds = document.getElementById('news-kinds');
     if (kinds) {
-      const chips = Array.from(kinds.querySelectorAll<HTMLElement>('.kind-chip'));
-      const applyKind = (kind: string) => {
+      const chips = Array.from(kinds.querySelectorAll('.kind-chip'));
+      const applyKind = (kind) => {
         chips.forEach((c) => c.classList.toggle('active', c.dataset.kind === kind));
-        document.querySelectorAll<HTMLElement>('.feed a[data-kind]').forEach((card) => {
+        document.querySelectorAll('.feed a[data-kind]').forEach((card) => {
           card.style.display = kind === 'all' || card.dataset.kind === kind ? '' : 'none';
         });
       };
@@ -104,17 +104,19 @@ const isNews = category === 'news';
       const validKind = chips.some((c) => c.dataset.kind === urlKind) ? urlKind : 'all';
       applyKind(validKind);
       kinds.addEventListener('click', (e) => {
-        const t = e.target as HTMLElement;
-        const btn = t.closest('.kind-chip') as HTMLElement | null;
+        const btn = e.target.closest('.kind-chip');
         if (!btn || !btn.dataset.kind) return;
         applyKind(btn.dataset.kind);
       });
     }
     // 查看更多展开
-    document.getElementById('load-more')?.addEventListener('click', () => {
-      document.getElementById('feed-more')?.classList.add('show');
-      document.getElementById('load-more')?.remove();
-    });
+    const loadMore = document.getElementById('load-more');
+    if (loadMore) {
+      loadMore.addEventListener('click', () => {
+        document.getElementById('feed-more')?.classList.add('show');
+        loadMore.remove();
+      });
+    }
   });
 </script>
 
