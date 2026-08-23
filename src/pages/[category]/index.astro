@@ -26,10 +26,11 @@ for (const i of active) {
 
 // 分类页：限 12 + 查看更多
 const PAGE = 12;
+const pubTime = (i) => (i.data.publishedAt ? i.data.publishedAt.getTime() : i.data.date.getTime());
 const allItems = [...dedup.values()].sort(
   (a, b) =>
     Number(b.data.featured) - Number(a.data.featured) ||
-    b.data.date.getTime() - a.data.date.getTime()
+    pubTime(b) - pubTime(a)
 );
 const items = allItems.slice(0, PAGE);
 const hiddenItems = allItems.slice(PAGE);
