@@ -25,6 +25,9 @@ const APPROVE_URL = (process.env.APPROVE_URL || '').replace(/\/$/, '');
 const SECRET = process.env.APPROVE_SECRET || '';
 const CHANNEL = (process.env.NOTIFY_CHANNEL || 'none').toLowerCase();
 const MAX_ITEMS = Number(process.env.NOTIFY_MAX_ITEMS || 15);
+// GitHub 读取模式：设了 GH_TOKEN 即从线上 main 分支读取真实 pending（与审核发布同源，避免推线上不存在的本地缓存）
+const GITHUB_REPO = process.env.GITHUB_REPO || 'longandy186/zhongsaitong';
+const GH_TOKEN = process.env.GH_TOKEN || '';
 
 // ---------- 签名 ----------
 function hmac(action, payload) {
@@ -45,6 +48,32 @@ function deleteUrl(id) {
   return approveUrl('delete', id);
 }
 
+// ---------- 工具：批次 & frontmatter ----------
+// 批次 = 文件名前缀的 YYYYMMDD（如 20260822 → 「2026-08-22 批次」），同一批次归为一组
+function deriveBatch(id) {
+  const m = id.match(/^(2026\d{4})/);
+  if (!m) return '未分批';
+  const s = m[1];
+  return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)} 批次`;
+}
+function parseFrontmatter(raw, id) {
+  const end = raw.indexOf('---', 3);
+  const fm = raw.slice(0, end > 0 ? end : raw.length);
+  const get = (k) =>
+    ((fm.match(new RegExp(`^${k}:\\s*(.+)$`, 'm')) || [])[1] || '')
+      .trim()
+      .replace(/^["']|["']$/g, '');
+  return {
+    id,
+    file: id + '.md',
+    title: get('title'),
+    topic: get('topic') || '其他',
+    source: get('source'),
+    date: get('date'),
+    batch: deriveBatch(id),
+  };
+}
+
 // ---------- 读取 pending ----------
 function readPending() {
   if (!fs.existsSync(ITEMS_DIR)) return [];
@@ -53,20 +82,45 @@ function readPending() {
     if (!f.endsWith('.md')) continue;
     const raw = fs.readFileSync(path.join(ITEMS_DIR, f), 'utf8');
     if (!/^status:\s*pending\s*$/m.test(raw)) continue;
-    const fm = raw.slice(0, (raw.indexOf('---', 3) > 0 ? raw.indexOf('---', 3) : raw.length));
-    const get = (k) =>
-      ((fm.match(new RegExp(`^${k}:\\s*(.+)$`, 'm')) || [])[1] || '')
-        .trim()
-        .replace(/^["']|["']$/g, '');
-    out.push({
-      id: f.replace(/\.md$/, ''),
-      file: f,
-      title: get('title'),
-      topic: get('topic') || '其他',
-      source: get('source'),
-    });
+    out.push(parseFrontmatter(raw, f.replace(/\.md$/, '')));
   }
   // 新的在前
+  return out.reverse();
+}
+
+// 从 GitHub 线上 main 分支读取真实 pending（与审核发布同源）。
+// onlyPrefix 可限定只取某批次（如「20260822-塞尔维亚媒体」），避免拉取全量。
+async function readPendingGithub(onlyPrefix) {
+  if (!GH_TOKEN) return null;
+  const auth = {
+    Authorization: `Bearer ${GH_TOKEN}`,
+    'User-Agent': 'zhongsaitong-notify',
+    Accept: 'application/vnd.github+json',
+  };
+  const treeRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/git/trees/main?recursive=1`, {
+    headers: auth,
+  });
+  if (!treeRes.ok) {
+    console.warn(`[notify] GitHub tree 读取失败 ${treeRes.status}`);
+    return null;
+  }
+  const tree = await treeRes.json();
+  const paths = (tree.tree || [])
+    .filter((t) => t.path.startsWith('src/content/items/') && t.path.endsWith('.md'))
+    .map((t) => t.path);
+  const out = [];
+  for (const p of paths) {
+    const id = p.split('/').pop().replace(/\.md$/, '');
+    if (onlyPrefix && !id.startsWith(onlyPrefix)) continue;
+    const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${encodeURIComponent(p)}`, {
+      headers: auth,
+    });
+    if (!r.ok) continue;
+    const j = await r.json();
+    const raw = Buffer.from(j.content, 'base64').toString('utf8');
+    if (!/^status:\s*pending\s*$/m.test(raw)) continue;
+    out.push(parseFrontmatter(raw, id));
+  }
   return out.reverse();
 }
 
@@ -95,25 +149,46 @@ function readActive() {
 }
 
 // ---------- 生成 Markdown ----------
+// 模板规则（用户要求）：
+//   · 每条都显示【时间 + 批次】，时间加粗 🕒 醒目
+//   · 先按【批次】分大块，同一批次内再按 topic（中塞/生活/其他）细分块
 // opts.heading: 卡片内 H2 标题（分批时用，如「待审核 1-15/50」）
 function buildMarkdown(items, opts = {}) {
   const heading = opts.heading || `📰 中塞通 · 待审核 ${items.length} 条`;
-  const groups = { 中塞: [], 生活: [], 其他: [] };
-  for (const it of items) (groups[it.topic] || groups['其他']).push(it);
 
-  let md = `## ${heading}\n\n`;
-  md += `点击下方链接即可在手机上审核发布，无需开电脑。\n\n`;
+  // 按批次分组（新批次在前，未分批置底）
+  const byBatch = {};
+  for (const it of items) {
+    const b = it.batch || '未分批';
+    (byBatch[b] = byBatch[b] || []).push(it);
+  }
+  const batches = Object.keys(byBatch).sort((a, b) => {
+    if (a === '未分批') return 1;
+    if (b === '未分批') return -1;
+    return b.localeCompare(a);
+  });
 
-  for (const g of ['中塞', '生活', '其他']) {
-    const list = groups[g];
-    if (!list.length) continue;
-    md += `### ${g}（${list.length}）\n`;
-    for (const it of list) {
-      const pub = approveUrl('publish', it.id);
-      const skip = approveUrl('skip', it.id);
-      md += `- ${it.title}\n  [✅ 发布](${pub}) · [⏭ 跳过](${skip})\n`;
+  let md = `## ${heading}\n\n> 点链接即可在手机上审核发布，无需开电脑。\n\n`;
+
+  for (const b of batches) {
+    const list = byBatch[b];
+    md += `### 📦 ${b}（${list.length} 条）\n\n`;
+    // 批次内细分块：按 topic
+    const groups = { 中塞: [], 生活: [], 其他: [] };
+    for (const it of list) (groups[it.topic] || groups['其他']).push(it);
+    for (const g of ['中塞', '生活', '其他']) {
+      const gl = groups[g];
+      if (!gl.length) continue;
+      const emoji = g === '中塞' ? '🟥' : g === '生活' ? '🟦' : '⬜';
+      md += `#### ${emoji} ${g}（${gl.length}）\n`;
+      for (const it of gl) {
+        const pub = approveUrl('publish', it.id);
+        const skip = approveUrl('skip', it.id);
+        const time = it.date ? `**🕒 ${it.date}**` : '**🕒 时间未注明**';
+        md += `- ${time}　${it.title}\n  [✅ 发布](${pub}) · [⏭ 跳过](${skip})\n`;
+      }
+      md += `\n`;
     }
-    md += `\n`;
   }
   return md;
 }
@@ -294,6 +369,8 @@ async function send(channel, items) {
 // ---------- 主流程 ----------
 async function main() {
   const isManage = process.argv.includes('--manage');
+  const onlyIdx = process.argv.indexOf('--only');
+  const onlyPrefix = onlyIdx >= 0 ? process.argv[onlyIdx + 1] : null;
   if (!APPROVE_URL || !SECRET) {
     console.warn('[notify] 警告：APPROVE_URL 或 APPROVE_SECRET 未设置，仅做本地预览（channel=none 行为）');
   }
@@ -315,7 +392,26 @@ async function main() {
     return;
   }
 
-  const items = readPending();
+  // 优先从 GitHub 线上读取真实 pending（与审核发布同源），否则回退本地。
+  let items;
+  if (GH_TOKEN) {
+    try {
+      const gh = await readPendingGithub(onlyPrefix);
+      if (gh && gh.length) {
+        items = gh;
+        console.log(`[notify] 已从 GitHub 读取 ${items.length} 条待审`);
+      } else {
+        console.warn('[notify] GitHub 读取为空，回退本地');
+        items = readPending();
+      }
+    } catch (e) {
+      console.warn('[notify] GitHub 读取异常，回退本地:', e.message);
+      items = readPending();
+    }
+  } else {
+    items = readPending();
+  }
+  if (onlyPrefix) items = items.filter((i) => i.id.startsWith(onlyPrefix));
   if (!items.length) {
     console.log('[notify] 无待审内容，跳过推送');
     return;
