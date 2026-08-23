@@ -22,10 +22,11 @@ for (const i of active) {
   const prev = dedup.get(key);
   if (!prev || i.data.date.getTime() > prev.data.date.getTime()) dedup.set(key, i);
 }
+const pubTime = (i) => (i.data.publishedAt ? i.data.publishedAt.getTime() : i.data.date.getTime());
 const sorted = [...dedup.values()].sort(
   (a, b) =>
     Number(b.data.featured) - Number(a.data.featured) ||
-    b.data.date.getTime() - a.data.date.getTime()
+    pubTime(b) - pubTime(a)
 );
 
 const SEVEN_DAYS = 7 * 24 * 3600 * 1000;
