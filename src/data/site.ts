@@ -4,7 +4,7 @@ export const SITE = {
   tagline: '塞尔维亚华人信息平台',
   description: '面向塞尔维亚华人的信息服务平台：租房、二手、招聘、中塞新闻、生活指南、供求对接',
   url: 'https://zhongsaitong.pages.dev',
-  email: 'contact@your-domain.com',
+  email: 'longandy2026@gmail.com',
 };
 
 // 信息流 Tab（7 个分类）
@@ -58,5 +58,5 @@ export const SOCIAL = {
 // 广告合作入口
 export const AD_URL = '/advertise/';
 
-// 表单接收端（formsubmit.co 免费版：注册后填入你的邮箱，如 https://formsubmit.co/your@email.com）
-export const FORM_ENDPOINT = 'https://formsubmit.co/your@email.com';
+// 表单接收端（formsubmit.co 免费版：填入接收邮箱，如 https://formsubmit.co/your@email.com）
+export const FORM_ENDPOINT = 'https://formsubmit.co/longandy2026@gmail.com';
