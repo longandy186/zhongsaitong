@@ -169,10 +169,20 @@ export async function onRequestGet({ request, env }) {
     }
 
     const newStatus = mode === 'publish' ? 'active' : 'rejected';
-    const newContent = content.replace(/^status:\s*pending\s*$/m, `status: ${newStatus}`);
-    if (newContent === content) {
-      results.push(`${tid}: 状态未变(已处理或非 pending)`);
+    const newContent0 = content.replace(/^status:\s*pending\s*$/m, `status: ${newStatus}`);
+    if (newContent0 === content) {
+      results.push(`${tid}: 状态未变(已处理过或非 pending)`);
       continue;
+    }
+    let newContent = newContent0;
+    // 发布时记录审核发布时间（用于排序：优先按 publishedAt）
+    if (mode === 'publish') {
+      const now = new Date().toISOString();
+      if (/^publishedAt:/m.test(newContent)) {
+        newContent = newContent.replace(/^publishedAt:.*$/m, `publishedAt: ${now}`);
+      } else {
+        newContent = newContent.replace(/^(status: active)$/m, `$1\npublishedAt: ${now}`);
+      }
     }
 
     // 2.2 写入 main（已存在则更新，不存在则创建）→ 触发部署
