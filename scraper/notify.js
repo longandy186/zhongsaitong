@@ -40,6 +40,11 @@ function approveUrl(action, payload) {
   return `${APPROVE_URL}?${q.toString()}`;
 }
 
+// 删除已发布内容的签名链接（action=delete，approve.js 从 main 删除文件）
+function deleteUrl(id) {
+  return approveUrl('delete', id);
+}
+
 // ---------- 读取 pending ----------
 function readPending() {
   if (!fs.existsSync(ITEMS_DIR)) return [];
@@ -62,6 +67,30 @@ function readPending() {
     });
   }
   // 新的在前
+  return out.reverse();
+}
+
+// ---------- 读取 active（已发布，供管理/删除） ----------
+function readActive() {
+  if (!fs.existsSync(ITEMS_DIR)) return [];
+  const out = [];
+  for (const f of fs.readdirSync(ITEMS_DIR)) {
+    if (!f.endsWith('.md')) continue;
+    const raw = fs.readFileSync(path.join(ITEMS_DIR, f), 'utf8');
+    if (!/^status:\s*active\s*$/m.test(raw)) continue;
+    const fm = raw.slice(0, (raw.indexOf('---', 3) > 0 ? raw.indexOf('---', 3) : raw.length));
+    const get = (k) =>
+      ((fm.match(new RegExp(`^${k}:\\s*(.+)$`, 'm')) || [])[1] || '')
+        .trim()
+        .replace(/^["']|["']$/g, '');
+    out.push({
+      id: f.replace(/\.md$/, ''),
+      file: f,
+      title: get('title'),
+      category: get('category') || '',
+      source: get('source'),
+    });
+  }
   return out.reverse();
 }
 
@@ -95,6 +124,19 @@ function buildBatchMarkdown(items) {
   const zhLife = items.filter((i) => ['中塞', '生活'].includes(i.topic)).map((i) => i.id);
   if (zhLife.length) md += `- [🚀 发布全部「中塞+生活」](${approveUrl('batch', zhLife.join(','))})\n`;
   md += `- [🗑 全部跳过](${approveUrl('skip', items.map((i) => i.id).join(','))})\n`;
+  return md;
+}
+
+// 管理卡：列出已发布(active)内容，每条带「删除」链接
+// 用法：node notify.js --manage   → 发一张飞书管理卡，点链接即删除并触发重新部署
+function buildManageMarkdown(items) {
+  let md = `## 🗂 中塞通 · 已发布内容管理（${items.length} 条）\n\n`;
+  md += `点击「🗑 删除」将直接从线上移除该条并重新部署。删除不可恢复，请确认。\n\n`;
+  for (const it of items) {
+    const del = deleteUrl(it.id);
+    const cat = it.category ? `[${it.category}] ` : '';
+    md += `- ${cat}${it.title}\n  [🗑 删除](${del})\n`;
+  }
   return md;
 }
 
@@ -146,6 +188,39 @@ async function sendFeishu(items) {
   });
   if (!rb.ok) throw new Error(`飞书批量卡推送失败 ${rb.status}: ${await rb.text()}`);
   console.log(`[notify] 飞书推送成功（${sent} 张明细卡 + 1 张批量卡，共 ${total} 条）`);
+}
+
+// 管理卡（已发布内容删除入口）：按每卡 ≤ MAX_ITEMS 分批发送
+async function sendManageFeishu(items) {
+  const hook = process.env.FEISHU_WEBHOOK;
+  if (!hook) throw new Error('FEISHU_WEBHOOK 未配置');
+  const total = items.length;
+  const PER = MAX_ITEMS;
+  let sent = 0;
+  for (let i = 0; i < items.length; i += PER) {
+    const chunk = items.slice(i, i + PER);
+    const start = i + 1;
+    const end = i + chunk.length;
+    const card = {
+      msg_type: 'interactive',
+      card: {
+        config: { wide_screen_mode: true },
+        header: {
+          title: { tag: 'plain_text', content: `中塞通 · 管理 ${start}-${end}/${total}` },
+          template: 'grey',
+        },
+        elements: [{ tag: 'markdown', content: buildManageMarkdown(chunk) }],
+      },
+    };
+    const r = await fetch(hook, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(card),
+    });
+    if (!r.ok) throw new Error(`飞书管理卡推送失败 ${r.status}: ${await r.text()}`);
+    sent++;
+  }
+  console.log(`[notify] 飞书管理卡推送成功（${sent} 张，共 ${total} 条已发布内容）`);
 }
 
 async function send(channel, items) {
@@ -218,9 +293,28 @@ async function send(channel, items) {
 
 // ---------- 主流程 ----------
 async function main() {
+  const isManage = process.argv.includes('--manage');
   if (!APPROVE_URL || !SECRET) {
     console.warn('[notify] 警告：APPROVE_URL 或 APPROVE_SECRET 未设置，仅做本地预览（channel=none 行为）');
   }
+
+  if (isManage) {
+    const items = readActive();
+    if (!items.length) {
+      console.log('[notify] 无已发布内容');
+      return;
+    }
+    if (CHANNEL === 'none') {
+      console.log('\n========== [notify] 管理卡预览(已发布内容) ==========\n');
+      console.log(buildManageMarkdown(items));
+      console.log('\n======================================================\n');
+      return;
+    }
+    if (CHANNEL === 'feishu') return sendManageFeishu(items);
+    console.log('[notify] --manage 仅支持 feishu / none 渠道');
+    return;
+  }
+
   const items = readPending();
   if (!items.length) {
     console.log('[notify] 无待审内容，跳过推送');

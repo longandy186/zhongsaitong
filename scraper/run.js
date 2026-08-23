@@ -123,6 +123,30 @@ async function fetchHtmlSource(source) {
   return uniq;
 }
 
+// 从 RSS item 抽取图片：enclosure / media:content / content 内 <img>
+function extractImages(it) {
+  const imgs = [];
+  const push = (u) => {
+    if (u && /^https?:\/\//i.test(u) && !imgs.includes(u)) imgs.push(u);
+  };
+  // 1) enclosure
+  if (it.enclosure?.url) push(it.enclosure.url);
+  // 2) media:content（rss-parser 放到 it['media:content'] 或 it.media）
+  const media = it['media:content'] ?? it.media?.['media:content'];
+  if (Array.isArray(media)) media.forEach((m) => push(m?.$.url || m?.url));
+  else if (media?.$.url) push(media.$.url);
+  // 3) content 里的 <img>
+  const html = it['content:encoded'] ?? it.content ?? '';
+  if (html) {
+    const $ = cheerio.load(html);
+    $('img').each((_, el) => {
+      const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-original');
+      push(src);
+    });
+  }
+  return imgs.slice(0, 5); // 最多保留 5 张
+}
+
 // ---------- RSS 抓取 ----------
 async function fetchRssSource(source) {
   const feed = await parser.parseURL(source.url);
@@ -134,6 +158,7 @@ async function fetchRssSource(source) {
       title: (it.title ?? '').trim().replace(/\s+/g, ' '),
       link: it.link ?? it.guid ?? '',
       content: (it.contentSnippet ?? it.content ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+      images: extractImages(it),
       pubDate: it.isoDate ? new Date(it.isoDate) : new Date(),
     }))
     .filter((it) => it.title && !seenLinks.has(it.link) && seenLinks.add(it.link));
@@ -147,7 +172,7 @@ async function fetchRssSource(source) {
 }
 // ---------- 生成 .md ----------
 function buildMd(entry) {
-  const { source, item, category, kind, finalTitle, body, note, topic, autoPublish, price, location, contact, summary } = entry;
+  const { source, item, category, kind, finalTitle, body, note, topic, autoPublish, price, location, contact, summary, images } = entry;
   const d = item.pubDate ?? new Date();
   const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
     d.getDate()
@@ -179,6 +204,7 @@ function buildMd(entry) {
   if (location) fmLines.push(`location: ${esc(location)}`);
   if (contact) fmLines.push(`contact: ${esc(contact)}`);
   if (summary) fmLines.push(`summary: ${esc(summary)}`);
+  if (images?.length) fmLines.push(`images: [${images.map((u) => `"${u}"`).join(', ')}]`);
   fmLines.push(`tags: [${tags.map((t) => `"${t}"`).join(', ')}]`);
   fmLines.push('---', '');
   const fm = fmLines.join('\n');
@@ -256,6 +282,7 @@ async function processEntry(source, item) {
     location,
     contact,
     summary,
+    images: item.images ?? [],
   };
 }
 

@@ -72,22 +72,24 @@ export async function onRequestGet({ request, env }) {
     publish: () => (id ? ((targets = [id]), (mode = 'publish')) : null),
     skip: () => (id ? ((targets = [id]), (mode = 'skip')) : null),
     batch: () => (ids ? ((targets = ids.split(',')), (mode = 'publish')) : null),
+    delete: () => (id ? ((targets = [id]), (mode = 'delete')) : null),
   };
-  // skip 批量也复用 ids
-  if (action === 'skip' && ids) {
+  // skip / delete 批量也复用 ids
+  if ((action === 'skip' || action === 'delete') && ids) {
     targets = ids.split(',');
-    mode = 'skip';
+    mode = action;
   } else if (actions[action]) {
     actions[action]();
   }
   if (!targets.length || !mode) return deny();
 
-  const payload = mode === 'publish' && action === 'batch' ? ids : action === 'skip' && ids ? ids : id;
+  const payload = mode === 'publish' && action === 'batch' ? ids : (action === 'skip' || action === 'delete') && ids ? ids : id;
   const expected = await hmacHex(secret, `${action}:${payload}`);
   if (expected !== sig) return deny();
 
-  // 2) 逐条处理：从 drafts 草稿读取 → 写入 main → 清理草稿
-  //    草稿分支(drafts)只存放「待审核」新闻；审核通过才合入 main 并触发部署。
+  // 2) 逐条处理
+  //    发布/跳过：从 drafts 草稿读取 → 写入 main → 清理草稿
+  //    删除：直接从 main 删除文件（已发布内容都在 main）→ 触发部署
   const results = [];
   const branch = 'main';
   const draftBranch = 'drafts';
@@ -101,6 +103,47 @@ export async function onRequestGet({ request, env }) {
       'User-Agent': 'zst-approve',
       Accept: 'application/vnd.github+json',
     };
+
+    if (mode === 'delete') {
+      // 删除：直接删 main 上的文件
+      let mainSha = null;
+      try {
+        const r = await fetch(mainApi, { headers });
+        if (r.ok) mainSha = (await r.json()).sha;
+      } catch { /* ignore */ }
+      if (!mainSha) {
+        results.push(`${tid}: main 无此文件(无需删除)`);
+        continue;
+      }
+      const delRes = await fetch(mainApi, {
+        method: 'DELETE',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          message: `delete: ${tid}`,
+          branch,
+          sha: mainSha,
+        }),
+      });
+      if (!delRes.ok) {
+        results.push(`${tid}: 删除失败(${delRes.status})`);
+        continue;
+      }
+      // 同时清理可能残留的草稿
+      let draftSha = null;
+      try {
+        const r = await fetch(draftApi, { headers });
+        if (r.ok) draftSha = (await r.json()).sha;
+      } catch { /* ignore */ }
+      if (draftSha) {
+        await fetch(draftApi, {
+          method: 'DELETE',
+          headers: { ...headers, 'content-type': 'application/json' },
+          body: JSON.stringify({ message: `delete: 移除草稿 ${tid}`, branch: draftBranch, sha: draftSha }),
+        });
+      }
+      results.push(`${tid}: 🗑 已删除`);
+      continue;
+    }
 
     // 2.1 优先从 drafts 草稿读取；草稿不存在时回退 main（兼容历史遗留 pending）
     let sourceApi = draftApi;
@@ -168,7 +211,7 @@ export async function onRequestGet({ request, env }) {
     results.push(`${tid}: ${mode === 'publish' ? '✅ 已发布' : '⏭ 已跳过'}`);
   }
 
-  const verb = mode === 'publish' ? '发布' : '跳过';
+  const verb = mode === 'publish' ? '发布' : mode === 'delete' ? '删除' : '跳过';
   return html(
     `<h2>中塞通 · 审核${verb}</h2>` +
       `<p>共处理 <b>${targets.length}</b> 条。</p>` +
