@@ -46,7 +46,7 @@ const isNews = category === 'news';
   <div class="sec-head" style="margin: 18px 16px 0;">
     <div class="sec-title">
       <div class="sec-bar"></div>
-      <h2>{label}</h2>
+      <h1 class="sec-h1">{label}</h1>
       <span class="badge-count">{allItems.length}条</span>
     </div>
   </div>
@@ -92,21 +92,22 @@ const isNews = category === 'news';
     // 新闻子分类筛选（仅 /news/ 页生效）
     const kinds = document.getElementById('news-kinds');
     if (kinds) {
-      const chips = kinds.querySelectorAll('.kind-chip');
-      chips.forEach((c) => {
-        if (c.dataset.default === '1') c.classList.add('active');
-      });
+      const chips = Array.from(kinds.querySelectorAll<HTMLElement>('.kind-chip'));
+      const applyKind = (kind: string) => {
+        chips.forEach((c) => c.classList.toggle('active', c.dataset.kind === kind));
+        document.querySelectorAll<HTMLElement>('.feed a[data-kind]').forEach((card) => {
+          card.style.display = kind === 'all' || card.dataset.kind === kind ? '' : 'none';
+        });
+      };
+      // 初始：优先 URL ?kind=（支持 /news/?kind=embassy 深链），否则默认「全部」
+      const urlKind = new URLSearchParams(window.location.search).get('kind') ?? 'all';
+      const validKind = chips.some((c) => c.dataset.kind === urlKind) ? urlKind : 'all';
+      applyKind(validKind);
       kinds.addEventListener('click', (e) => {
         const t = e.target as HTMLElement;
         const btn = t.closest('.kind-chip') as HTMLElement | null;
-        if (!btn) return;
-        chips.forEach((c) => c.classList.remove('active'));
-        btn.classList.add('active');
-        const kind = btn.dataset.kind;
-        document.querySelectorAll('.feed a[data-kind]').forEach((card) => {
-          const el = card as HTMLElement;
-          el.style.display = kind === 'all' || el.dataset.kind === kind ? '' : 'none';
-        });
+        if (!btn || !btn.dataset.kind) return;
+        applyKind(btn.dataset.kind);
       });
     }
     // 查看更多展开
@@ -123,8 +124,8 @@ const isNews = category === 'news';
   .sec-title { display: flex; align-items: center; gap: 8px; }
   .sec-bar { width: 4px; height: 18px; background: var(--wine); border-radius: 2px; }
   @media (min-width: 1024px) { .sec-bar { width: 5px; height: 22px; } }
-  .sec-title h2 { font-size: 19px; font-weight: 700; }
-  @media (min-width: 1024px) { .sec-title h2 { font-size: 22px; } }
+  .sec-title h1.sec-h1 { font-size: 19px; font-weight: 700; }
+  @media (min-width: 1024px) { .sec-title h1.sec-h1 { font-size: 22px; } }
   .badge-count { background: var(--pink-soft); color: var(--wine); font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 8px; }
 
   .news-kinds { display: flex; gap: 8px; padding: 12px 16px 4px; overflow-x: auto; scrollbar-width: none; }

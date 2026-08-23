@@ -4,96 +4,145 @@ import Header from '../components/Header.astro';
 import Card from '../components/Card.astro';
 import { getCollection } from 'astro:content';
 
-const q = Astro.url.searchParams.get('q')?.trim().toLowerCase() ?? '';
+// 静态站点下服务端无法按 ?q= 过滤（构建期才执行），
+// 因此这里渲染全部 active 卡片（每张带 data-search），
+// 由客户端脚本读 URL 参数 / 输入框实时过滤。
 const all = await getCollection('items');
-const filtered = all
+const active = all
   .filter((i) => i.data.status === 'active')
-  .filter((i) => {
-    if (!q) return false;
-    const haystack = `${i.data.title} ${i.body ?? ''} ${i.data.location ?? ''}`.toLowerCase();
-    return haystack.includes(q);
-  })
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
-
-const PAGE = 12;
-const items = filtered.slice(0, PAGE);
-const hiddenItems = filtered.slice(PAGE);
-const hasMore = hiddenItems.length > 0;
 ---
 
-<Base title={q ? `搜索：${q} · 中塞通` : '搜索 · 中塞通'}>
+<Base title="搜索 · 中塞通">
   <Header />
 
   <section class="search-hero">
     <h1>搜索</h1>
-    <form action="/search" method="get" class="search-bar" role="search">
+    <form action="/search" method="get" class="search-bar" role="search" id="search-form">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
         <path d="M16 16L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
       </svg>
       <input
+        id="search-input"
         name="q"
         type="search"
-        value={q}
         placeholder="搜索房源、工作、资讯、指南…"
         aria-label="搜索"
         autocomplete="off"
-        autofocus
       />
       <button type="submit" class="btn-pink">搜索</button>
     </form>
-    {q && (
-      <div class="search-meta">
-        {filtered.length > 0
-          ? `找到 ${filtered.length} 条与 "${q}" 相关的结果`
-          : `没有找到与 "${q}" 相关的信息`}
-      </div>
-    )}
+    <div class="search-meta" id="search-meta" hidden></div>
   </section>
 
-  {
-    !q ? (
-      <div class="empty">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="opacity:.35;">
-          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
-          <path d="M16 16L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-        <p>请输入关键词搜索</p>
-        <div class="suggest">
-          <span>试试：</span>
-          <a href="/search/?q=租房">租房</a>
-          <a href="/search/?q=招聘">招聘</a>
-          <a href="/search/?q=使馆">使馆</a>
-        </div>
-      </div>
-    ) : items.length === 0 ? (
-      <div class="empty">
-        <p>没有找到与 "{q}" 相关的信息</p>
-        <p class="empty-sub">换个关键词，或<button class="suggest-btn" onclick="history.back()">返回上一页</button></p>
-      </div>
-    ) : (
-      <div class="feed" id="feed">
-        {items.map((item) => <Card item={item} />)}
-        {hasMore && (
-          <Fragment>
-            <div class="feed-hidden" id="feed-more">
-              {hiddenItems.map((item) => <Card item={item} />)}
-            </div>
-            <button id="load-more" type="button" class="more-btn">
-              查看更多 ({hiddenItems.length}) <span>→</span>
-            </button>
-          </Fragment>
-        )}
-      </div>
-    )
-  }
+  <div class="empty" id="search-empty">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="opacity:.35;">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+      <path d="M16 16L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+    </svg>
+    <p id="empty-text">请输入关键词搜索</p>
+    <div class="suggest">
+      <span>试试：</span>
+      <button type="button" class="suggest-btn" data-suggest="租房">租房</button>
+      <button type="button" class="suggest-btn" data-suggest="招聘">招聘</button>
+      <button type="button" class="suggest-btn" data-suggest="使馆">使馆</button>
+    </div>
+  </div>
+
+  <div class="feed" id="search-feed" hidden>
+    {active.map((item) => <Card item={item} />)}
+    <button id="load-more" type="button" class="more-btn" hidden>
+      查看更多 <span>→</span>
+    </button>
+  </div>
 </Base>
 
 <script is:inline>
   document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('load-more')?.addEventListener('click', () => {
-      document.getElementById('feed-more')?.classList.add('show');
-      document.getElementById('load-more')?.remove();
+    const input = document.getElementById('search-input') as HTMLInputElement | null;
+    const meta = document.getElementById('search-meta') as HTMLElement | null;
+    const emptyBox = document.getElementById('search-empty') as HTMLElement | null;
+    const emptyText = document.getElementById('empty-text') as HTMLElement | null;
+    const feed = document.getElementById('search-feed') as HTMLElement | null;
+    const moreBtn = document.getElementById('load-more') as HTMLButtonElement | null;
+    if (!input || !feed) return;
+
+    const cards = Array.from(feed.querySelectorAll<HTMLElement>('.card'));
+    const PAGE = 12;
+    let shown = PAGE;
+    let currentQ = '';
+
+    function applySearch(rawQ: string) {
+      const q = rawQ.trim().toLowerCase();
+      currentQ = q;
+      // 命中过滤（data-search 已含标题/正文/位置/价格，小写去空白）
+      let hits = 0;
+      cards.forEach((c) => {
+        const ok = q !== '' && (c.dataset.search ?? '').includes(q);
+        c.style.display = ok ? '' : 'none';
+        if (ok) hits++;
+      });
+      shown = PAGE;
+
+      const hasQ = q !== '';
+      if (meta) {
+        meta.hidden = !hasQ;
+        if (hasQ) meta.textContent = hits > 0 ? `找到 ${hits} 条与 "${q}" 相关的结果` : `没有找到与 "${q}" 相关的信息`;
+      }
+      if (emptyBox) {
+        emptyBox.hidden = hasQ && hits > 0;
+        if (emptyText) emptyText.textContent = hasQ ? `没有找到与 "${q}" 相关的信息` : '请输入关键词搜索';
+      }
+      if (feed) feed.hidden = hits === 0;
+      if (moreBtn) moreBtn.hidden = hits <= PAGE;
+
+      // 只显示前 PAGE 条，其余收进 load-more
+      let shownCount = 0;
+      cards.forEach((c) => {
+        if (c.style.display === 'none') return;
+        shownCount++;
+        c.style.display = shownCount > PAGE ? 'none' : '';
+      });
+    }
+
+    // 初始：读 URL 参数（GET 提交 / 直接访问 ?q=xxx）
+    const params = new URLSearchParams(window.location.search);
+    const urlQ = params.get('q') ?? '';
+    input.value = urlQ;
+    applySearch(urlQ);
+
+    // 输入实时搜索
+    input.addEventListener('input', () => {
+      applySearch(input.value);
+    });
+
+    // 表单提交走 GET（保留 URL 可分享），阻止默认由浏览器带参跳转即可
+    const form = document.getElementById('search-form') as HTMLFormElement | null;
+    form?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      applySearch(input.value);
+    });
+
+    // 建议词点击即搜
+    document.querySelectorAll<HTMLButtonElement>('[data-suggest]').forEach((b) => {
+      b.addEventListener('click', () => {
+        input.value = b.dataset.suggest ?? '';
+        applySearch(input.value);
+        input.focus();
+      });
+    });
+
+    // 查看更多
+    moreBtn?.addEventListener('click', () => {
+      shown += PAGE;
+      let shownCount = 0;
+      cards.forEach((c) => {
+        if (c.style.display === 'none') return;
+        shownCount++;
+        c.style.display = shownCount > shown ? 'none' : '';
+      });
+      if (moreBtn) moreBtn.hidden = shownCount <= shown;
     });
   });
 </script>
@@ -121,16 +170,13 @@ const hasMore = hiddenItems.length > 0;
 
   .feed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px 4px; }
   @media (min-width: 1024px) { .feed { grid-template-columns: repeat(3, 1fr); gap: 18px; padding: 0; max-width: 1280px; margin: 0 auto; } }
-  .feed-hidden { display: none; }
-  .feed-hidden.show { display: contents; }
   .more-btn { display: block; text-align: center; margin: 14px 16px 0; padding: 13px; border-radius: 14px; background: #fff; border: 0; color: var(--wine); font-weight: 600; font-size: 14px; }
   .more-btn:active { transform: scale(0.97); }
   @media (min-width: 1024px) { .more-btn { margin: 0; } }
 
   .empty { text-align: center; color: var(--ink-3); padding: 60px 16px; font-size: 14px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
   .empty p { margin: 0; }
-  .empty-sub { font-size: 12px; color: var(--ink-4); }
   .suggest { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; font-size: 13px; color: var(--ink-2); }
-  .suggest a { background: var(--pink-soft); color: var(--wine); padding: 4px 12px; border-radius: 999px; font-size: 12px; }
-  .suggest-btn { background: none; border: 0; color: var(--wine); cursor: pointer; padding: 0; font: inherit; }
+  .suggest-btn { background: var(--pink-soft); color: var(--wine); padding: 4px 12px; border-radius: 999px; font-size: 12px; border: 0; cursor: pointer; }
+  .suggest-btn:hover { background: #EBD9DD; }
 </style>

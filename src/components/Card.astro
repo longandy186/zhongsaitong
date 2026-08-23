@@ -14,6 +14,10 @@ const style = TYPE_STYLE[data.category];
 const summary = (body ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
 const cover = data.images[0];
 const timeText = formatTime(data.date);
+// 客户端搜索用的可检索文本（小写、去空白），覆盖标题/正文/位置/价格
+const searchText = `${data.title} ${(body ?? '').replace(/\s+/g, ' ')} ${data.location ?? ''} ${data.price ?? ''}`
+  .toLowerCase()
+  .trim();
 
 function formatTime(d: Date): string {
   const diff = Date.now() - d.getTime();
@@ -28,7 +32,7 @@ function formatTime(d: Date): string {
 }
 ---
 
-<a href={itemUrl(item)} class="card" data-kind={data.kind}>
+<a href={itemUrl(item)} class="card" data-kind={data.kind} data-search={searchText}>
   {cover ? (
     <div class="card-img">
       <img src={cover} alt={data.title} loading="lazy" />

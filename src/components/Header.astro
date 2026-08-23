@@ -7,12 +7,13 @@ const { active = '' } = Astro.props;
 const nav = [
   { key: 'home', label: '首页', href: '/' },
   { key: 'news', label: '要闻', href: '/news/' },
-  { key: 'rentals', label: '分类', href: '/rentals/' },
+  { key: 'rentals', label: '租房', href: '/rentals/' },
   { key: 'guide', label: '指南', href: '/guide/' },
   { key: 'tools', label: '工具', href: '/tools/' },
   { key: 'embassy', label: '使馆', href: '/news/?kind=embassy' },
   { key: 'chamber', label: '商会', href: '/news/?kind=chamber' },
 ];
+const mobileNav = [...nav, { key: 'publish', label: '发布信息', href: '/publish/' }];
 ---
 
 <header class="header">
@@ -40,7 +41,19 @@ const nav = [
     </form>
 
     <a href="/publish" class="btn btn-pink">发布</a>
+
+    <button class="hamburger" id="hamburger" type="button" aria-label="打开菜单" aria-expanded="false" aria-controls="mobile-menu">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
   </div>
+
+  <nav class="mobile-menu" id="mobile-menu" aria-label="移动端导航" hidden>
+    {mobileNav.map((n) => (
+      <a href={n.href} class:list={[active === n.key && 'active']} onClick="this.closest('#mobile-menu').hidden = true">{n.label}</a>
+    ))}
+  </nav>
 </header>
 
 <style>
@@ -115,4 +128,38 @@ const nav = [
   .btn-pink { background: var(--pink, #FF4D6D); color: #fff; }
   .btn-pink:active { transform: scale(0.95); }
   .btn-pink:hover { opacity: 0.92; }
+
+  /* 汉堡按钮：桌面隐藏 */
+  .hamburger {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border: 0; background: transparent;
+    color: var(--ink, #1F1B2E); cursor: pointer; border-radius: 8px;
+    flex-shrink: 0;
+  }
+  .hamburger:active { background: var(--pink-soft, #F3E8EA); }
+  @media (min-width: 1024px) { .hamburger { display: none; } }
+
+  /* 移动端下拉菜单：桌面隐藏 */
+  .mobile-menu { display: flex; flex-direction: column; }
+  .mobile-menu a {
+    padding: 13px 20px; font-size: 15px; color: var(--ink-2, #5A5861);
+    border-top: 1px solid var(--line-soft, #EFEDEA);
+    transition: background .15s, color .15s;
+  }
+  .mobile-menu a:active { background: var(--pink-soft, #F3E8EA); }
+  .mobile-menu a.active { color: var(--wine, #7B1E3B); font-weight: 600; }
+  @media (min-width: 1024px) { .mobile-menu { display: none !important; } }
 </style>
+
+<script is:inline>
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('hamburger');
+    const menu = document.getElementById('mobile-menu');
+    if (!btn || !menu) return;
+    btn.addEventListener('click', () => {
+      const open = menu.hidden;
+      menu.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+    });
+  });
+</script>
