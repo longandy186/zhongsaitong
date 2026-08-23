@@ -12,6 +12,8 @@ const items = defineCollection({
     price: z.string().optional(),
     location: z.string().optional(),
     date: z.coerce.date(),
+    // 审核发布到站点上的时间（排序优先按它，无则回退 date）
+    publishedAt: z.coerce.date().optional(),
     contact: z.string().optional(),
     featured: z.boolean().default(false),
     status: z.enum(['active', 'pending', 'expired', 'done']).default('active'),
