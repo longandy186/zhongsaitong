@@ -59,3 +59,14 @@ jobs:
           # 供 notify.js 从远程读取真实 pending 清单
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
+
+      - name: Commit notify state
+        # 把 notify-state.json 提交回去，保证下次运行时已推送状态不丢失（防重复发）。
+        run: |
+          git add scraper/notify-state.json
+          if git diff --cached --quiet; then
+            echo "状态无变化，跳过提交"
+          else
+            git commit -m "chore: sync notify state $(date +%Y-%m-%d)"
+            git push
+          fi
