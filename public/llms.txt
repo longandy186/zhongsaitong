@@ -4,15 +4,15 @@
 
 ## 核心页面
 
-- 首页: https://zhongsaitong.pages.dev/
-- 今日要闻: https://zhongsaitong.pages.dev/news/
-- 租房: https://zhongsaitong.pages.dev/rentals/
-- 招聘: https://zhongsaitong.pages.dev/jobs/
-- 二手买卖: https://zhongsaitong.pages.dev/secondhand/
-- 生活指南: https://zhongsaitong.pages.dev/guide/
-- 供求: https://zhongsaitong.pages.dev/supply/
-- 常见问题: https://zhongsaitong.pages.dev/faq/
-- 汇率/天气/扫价签: https://zhongsaitong.pages.dev/tools/scan/
+- 首页: https://zhongsaitong.com/
+- 今日要闻: https://zhongsaitong.com/news/
+- 租房: https://zhongsaitong.com/rentals/
+- 招聘: https://zhongsaitong.com/jobs/
+- 二手买卖: https://zhongsaitong.com/secondhand/
+- 生活指南: https://zhongsaitong.com/guide/
+- 供求: https://zhongsaitong.com/supply/
+- 常见问题: https://zhongsaitong.com/faq/
+- 汇率/天气/扫价签: https://zhongsaitong.com/tools/scan/
 
 ## 关于
 

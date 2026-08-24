@@ -72,7 +72,7 @@ export const LINK_GROUPS: LinkGroup[] = [
     icon: '媒体',
     items: [
       { name: '中国驻塞尔维亚使馆', url: 'https://belgrade.china-embassy.gov.cn' },
-      { name: '中塞通', url: 'https://zhongsaitong.pages.dev', note: '本站：每日要闻 / 汇率天气 / 常用工具' },
+      { name: '中塞通', url: 'https://zhongsaitong.com', note: '本站：每日要闻 / 汇率天气 / 常用工具' },
     ],
   },
 ];

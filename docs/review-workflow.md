@@ -30,7 +30,7 @@ GitHub Actions (每天 08:00 & 20:00 北京时间)
 | `NOTIFY_CHANNEL` | 渠道名：**`feishu`(默认审核渠道)** / `wechat` / `whatsapp` / `none`。审核推荐用 `feishu` |
 | `FEISHU_WEBHOOK` | 飞书群自定义机器人 webhook（审核用，填这个） |
 | `WECHAT_APPID` / `WECHAT_APPSECRET` / `WECHAT_TO_OPENID` | 公众号凭证。**仅当你注册的是企业服务号**时才用于审核推送；个人公众号无客服消息接口，此渠道不可用，请改用飞书审核 |
-| `APPROVE_URL` | 审核回调地址，即 Cloudflare Function 公网 URL，如 `https://zhongsaitong.pages.dev/api/approve` |
+| `APPROVE_URL` | 审核回调地址，即 Cloudflare Function 公网 URL，如 `https://zhongsaitong.com/api/approve` |
 | `APPROVE_SECRET` | 签名密钥（与下方 Cloudflare 的必须一致，自行生成一段随机串） |
 
 > 生成密钥示例：`openssl rand -hex 16`
@@ -50,7 +50,7 @@ GitHub Actions (每天 08:00 & 20:00 北京时间)
 # 仅打印 Markdown 预览，不真正发送（验证读取 pending + 生成签名链接）
 cd scraper
 NOTIFY_CHANNEL=none \
-  APPROVE_URL="https://zhongsaitong.pages.dev/api/approve" \
+  APPROVE_URL="https://zhongsaitong.com/api/approve" \
   APPROVE_SECRET="testsecret" \
   node notify.js
 ```

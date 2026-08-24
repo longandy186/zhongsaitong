@@ -1,5 +1,5 @@
 ---
-import { CATEGORY_LABEL } from '../data/site';
+import { SITE, CATEGORY_LABEL } from '../data/site';
 import { itemUrl } from '../lib/itemUrl';
 import { cleanSummary } from '../lib/summary';
 import type { CollectionEntry } from 'astro:content';
@@ -10,7 +10,7 @@ interface Props {
 }
 const { item } = Astro.props;
 const { data, id } = item;
-const url = `https://zhongsaitong.pages.dev${itemUrl(item)}`;
+const url = `${SITE.url}${itemUrl(item)}`;
 const summary = cleanSummary(item, 120);
 const org = { '@type': 'Organization', name: '中塞通' };
 
@@ -101,12 +101,12 @@ const breadcrumb = {
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
   itemListElement: [
-    { '@type': 'ListItem', position: 1, name: '首页', item: 'https://zhongsaitong.pages.dev/' },
+    { '@type': 'ListItem', position: 1, name: '首页', item: `${SITE.url}/` },
     {
       '@type': 'ListItem',
       position: 2,
       name: CATEGORY_LABEL[data.category] ?? '信息',
-      item: `https://zhongsaitong.pages.dev/${data.category}/`,
+      item: `${SITE.url}/${data.category}/`,
     },
     { '@type': 'ListItem', position: 3, name: data.title },
   ],

@@ -9,7 +9,7 @@
 //     （飞书 / 微信 / WhatsApp）都可用 —— 点链接即在手机上审核，无需开电脑。
 //
 // 用法（在 GitHub Actions 内调用）：
-//   NOTIFY_CHANNEL=feishu FEISHU_WEBHOOK=xxx APPROVE_URL=https://x.pages.dev/api/approve APPROVE_SECRET=yyy node notify.js
+//   NOTIFY_CHANNEL=feishu FEISHU_WEBHOOK=xxx APPROVE_URL=https://zhongsaitong.com/api/approve APPROVE_SECRET=yyy node notify.js
 //
 // 本地联调：NOTIFY_CHANNEL=none 仅打印，不发真实消息。
 

@@ -3,7 +3,7 @@ export const SITE = {
   name: '中塞通',
   tagline: '塞尔维亚华人信息平台',
   description: '面向塞尔维亚华人的信息服务平台：租房、二手、招聘、中塞新闻、生活指南、供求对接',
-  url: 'https://zhongsaitong.pages.dev',
+  url: 'https://zhongsaitong.com',
   email: 'longandy2026@gmail.com',
 };
 

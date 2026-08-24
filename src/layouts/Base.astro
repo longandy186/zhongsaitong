@@ -35,7 +35,7 @@ const canonical = canonicalProp
         "name": "中塞通",
         "alternateName": "ZhongSaiTong",
         "description": "塞尔维亚华人信息平台，提供每日要闻、使馆/商会动态、房源、招聘、生活指南与汇率天气工具",
-        "url": "https://zhongsaitong.pages.dev/",
+        "url": `${SITE.url}/`,
         "sameAs": []
       }
     </script>
@@ -44,10 +44,10 @@ const canonical = canonicalProp
         "@context": "https://schema.org",
         "@type": "WebSite",
         "name": "中塞通",
-        "url": "https://zhongsaitong.pages.dev/",
+        "url": `${SITE.url}/`,
         "potentialAction": {
           "@type": "SearchAction",
-          "target": "https://zhongsaitong.pages.dev/search?q={search_term_string}",
+          "target": `${SITE.url}/search?q={search_term_string}`,
           "query-input": "required name=search_term_string"
         }
       }

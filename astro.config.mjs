@@ -2,7 +2,7 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 
 export default defineConfig({
-  site: 'https://zhongsaitong.pages.dev',
+  site: 'https://zhongsaitong.com',
   output: 'static',
   build: {
     assets: '_assets',
