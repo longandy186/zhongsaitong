@@ -29,6 +29,41 @@ const MAX_ITEMS = Number(process.env.NOTIFY_MAX_ITEMS || 15);
 const GITHUB_REPO = process.env.GITHUB_REPO || 'longandy186/zhongsaitong';
 const GH_TOKEN = process.env.GH_TOKEN || '';
 
+// ---------- 已推送状态（防重复发卡） ----------
+// 每次成功推送后，把该批 pending 的 id 记入 state.json 的 pushed[]。
+// 下次运行时只推送「不在 pushed[] 且线上仍为 pending」的新条目；已推送过的跳过。
+// --force 可强制全量重推。
+const STATE_FILE = path.join(__dirname, 'notify-state.json');
+let notifyState = { pushed: [] };
+function loadNotifyState() {
+  try {
+    if (fs.existsSync(STATE_FILE)) notifyState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+  } catch {
+    notifyState = { pushed: [] };
+  }
+  if (!Array.isArray(notifyState.pushed)) notifyState.pushed = [];
+}
+function saveNotifyState() {
+  fs.writeFileSync(STATE_FILE, JSON.stringify(notifyState, null, 2), 'utf8');
+}
+// 过滤出「尚未推送过」的条目；--force 时返回全部
+function filterUnpushed(items) {
+  const force = process.argv.includes('--force');
+  if (force) return { toSend: items, skipped: [] };
+  const pushedSet = new Set(notifyState.pushed);
+  const toSend = [];
+  const skipped = [];
+  for (const it of items) {
+    if (pushedSet.has(it.id)) skipped.push(it.id);
+    else toSend.push(it);
+  }
+  return { toSend, skipped };
+}
+function markPushed(items) {
+  for (const it of items) if (!notifyState.pushed.includes(it.id)) notifyState.pushed.push(it.id);
+  saveNotifyState();
+}
+
 // ---------- 签名 ----------
 function hmac(action, payload) {
   return crypto.createHmac('sha256', SECRET).update(`${action}:${payload}`).digest('hex').slice(0, 16);
@@ -416,7 +451,19 @@ async function main() {
     console.log('[notify] 无待审内容，跳过推送');
     return;
   }
-  await send(CHANNEL, items);
+
+  // 防重复：只推尚未推送过的；--force 全量重推
+  loadNotifyState();
+  const { toSend, skipped } = filterUnpushed(items);
+  console.log(`[notify] 待推送 ${toSend.length} 条，已推过跳过 ${skipped.length} 条`);
+  if (!toSend.length) {
+    console.log('[notify] 本轮无新增待审，不重复推送（可用 --force 强制全量重推）');
+    return;
+  }
+  await send(CHANNEL, toSend);
+  // 推送成功后记录，避免下次重复发
+  markPushed(toSend);
+  console.log(`[notify] 已推送并记录 ${toSend.length} 条`);
 }
 
 main().catch((e) => {
