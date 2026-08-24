@@ -105,6 +105,7 @@ function parseFrontmatter(raw, id) {
     topic: get('topic') || '其他',
     source: get('source'),
     date: get('date'),
+    scrapedAt: get('scrapedAt'),
     batch: deriveBatch(id),
   };
 }
@@ -187,9 +188,18 @@ function readActive() {
 // 模板规则（用户要求）：
 //   · 每条都显示【时间 + 批次】，时间加粗 🕒 醒目
 //   · 先按【批次】分大块，同一批次内再按 topic（中塞/生活/其他）细分块
+//   · 每条标注「抓取时间」；卡片头部标注本次「发送时间」
 // opts.heading: 卡片内 H2 标题（分批时用，如「待审核 1-15/50」）
+function fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 function buildMarkdown(items, opts = {}) {
   const heading = opts.heading || `📰 中塞通 · 待审核 ${items.length} 条`;
+  const sentAt = fmtTime(new Date().toISOString());
 
   // 按批次分组（新批次在前，未分批置底）
   const byBatch = {};
@@ -203,7 +213,9 @@ function buildMarkdown(items, opts = {}) {
     return b.localeCompare(a);
   });
 
-  let md = `## ${heading}\n\n> 点链接即可在手机上审核发布，无需开电脑。\n\n`;
+  let md = `## ${heading}\n\n`;
+  md += `> 📤 发送时间：**${sentAt}**\n`;
+  md += `> 点链接即可在手机上审核发布，无需开电脑。\n\n`;
 
   for (const b of batches) {
     const list = byBatch[b];
@@ -219,8 +231,8 @@ function buildMarkdown(items, opts = {}) {
       for (const it of gl) {
         const pub = approveUrl('publish', it.id);
         const skip = approveUrl('skip', it.id);
-        const time = it.date ? `**🕒 ${it.date}**` : '**🕒 时间未注明**';
-        md += `- ${time}　${it.title}\n  [✅ 发布](${pub}) · [⏭ 跳过](${skip})\n`;
+        const scrapeT = it.scrapedAt ? fmtTime(it.scrapedAt) : (it.date || '未记录');
+        md += `- 🕓 **抓取 ${scrapeT}**　${it.title}\n  [✅ 发布](${pub}) · [⏭ 跳过](${skip})\n`;
       }
       md += `\n`;
     }
