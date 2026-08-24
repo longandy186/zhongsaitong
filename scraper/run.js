@@ -233,6 +233,7 @@ function buildMd(entry) {
     `category: ${category}`,
     `kind: ${kind}`,
     `date: ${dateStr}`,
+    `scrapedAt: ${new Date().toISOString()}`,
     `status: ${autoPublish ? 'active' : 'pending'}`,
   ];
   if (autoPublish) {
