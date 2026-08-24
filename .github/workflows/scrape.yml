@@ -27,6 +27,9 @@ jobs:
           # 在仓库 Settings → Secrets and variables → Actions 中配置
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           AGNES_API_KEY: ${{ secrets.AGNES_API_KEY }}
+          # 用于远程 main 去重（run.js 合并远程 items 键，避免重复抓取）
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPO: ${{ github.repository }}
 
       - name: Commit & push
         run: |
@@ -41,8 +44,9 @@ jobs:
           fi
 
       - name: Notify pending for review
-        # 抓取后把 pending 草稿推送到审核渠道（飞书/微信/WhatsApp）
-        # 即使本次无新内容，也会把存量 pending 一并推送，方便你随时审核
+        # 抓取后把「本轮新增」的 pending 草稿推送到审核渠道（飞书/微信/WhatsApp）。
+        # notify.js 用 notify-state.json 记录已推送条目，只推新增、不重复发；
+        # 如需全量重推：加 --force。
         run: cd scraper && node notify.js
         env:
           NOTIFY_CHANNEL: ${{ secrets.NOTIFY_CHANNEL }}
@@ -52,3 +56,6 @@ jobs:
           WECHAT_TO_OPENID: ${{ secrets.WECHAT_TO_OPENID }}
           APPROVE_URL: ${{ secrets.APPROVE_URL }}
           APPROVE_SECRET: ${{ secrets.APPROVE_SECRET }}
+          # 供 notify.js 从远程读取真实 pending 清单
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPO: ${{ github.repository }}
