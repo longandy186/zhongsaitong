@@ -31,20 +31,64 @@ const parser = new Parser({
 });
 
 // ---------- 去重：收集现有 items 的 source+title ----------
+// 双源去重：
+//  1) 本地 ITEMS_DIR 现有文件（loadExisting）
+//  2) 若配置了 GH_TOKEN（GitHub Actions 场景），再用 mergeRemoteKeys 拉取远程 main 的
+//     items 清单合并进去重集合，避免「干净 checkout 工作区只有远程部分内容 → 把已存在
+//     的新闻重新抓一遍」的重复。
 function loadExisting() {
   const seen = new Set();
-  if (!fs.existsSync(ITEMS_DIR)) return seen;
-  for (const f of fs.readdirSync(ITEMS_DIR)) {
-    if (!f.endsWith('.md')) continue;
-    const content = fs.readFileSync(path.join(ITEMS_DIR, f), 'utf8');
-    const clean = (s) => (s ?? '').replace(/^"+|"+$/g, '').trim();
-    const source = clean(content.match(/^source:\s*(.+)$/m)?.[1]);
-    // 用原始标题做去重键（AI 改写后的 title 不稳定）
-    const srcTitle = clean(content.match(/^sourceTitle:\s*(.+)$/m)?.[1]);
-    const title = srcTitle || clean(content.match(/^title:\s*(.+)$/m)?.[1]);
-    if (title) seen.add(`${source}|${title}`);
+  const clean = (s) => (s ?? '').replace(/^"+|"+$/g, '').trim();
+  if (fs.existsSync(ITEMS_DIR)) {
+    for (const f of fs.readdirSync(ITEMS_DIR)) {
+      if (!f.endsWith('.md')) continue;
+      const content = fs.readFileSync(path.join(ITEMS_DIR, f), 'utf8');
+      const source = clean(content.match(/^source:\s*(.+)$/m)?.[1]);
+      const srcTitle = clean(content.match(/^sourceTitle:\s*(.+)$/m)?.[1]);
+      const title = srcTitle || clean(content.match(/^title:\s*(.+)$/m)?.[1]);
+      if (title) seen.add(`${source}|${title}`);
+    }
   }
   return seen;
+}
+
+// 把远程 main 的 items 去重键并入集合（异步；失败静默，不阻断抓取）
+async function mergeRemoteKeys(seen) {
+  const ghToken = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+  if (!ghToken) return;
+  const repo = process.env.GITHUB_REPO || 'longandy186/zhongsaitong';
+  try {
+    const treeRes = await fetch(`https://api.github.com/repos/${repo}/git/trees/main?recursive=1`, {
+      headers: { Authorization: `Bearer ${ghToken}`, 'User-Agent': 'zhongsaitong-run', Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!treeRes.ok) return;
+    const tree = await treeRes.json();
+    const paths = (tree.tree || [])
+      .filter((t) => t.path.startsWith('src/content/items/') && t.path.endsWith('.md'))
+      .map((t) => t.path);
+    const clean = (s) => (s ?? '').replace(/^"+|"+$/g, '').trim();
+    for (const p of paths) {
+      try {
+        const r = await fetch(`https://api.github.com/repos/${repo}/contents/${encodeURIComponent(p)}`, {
+          headers: { Authorization: `Bearer ${ghToken}`, 'User-Agent': 'zhongsaitong-run', Accept: 'application/vnd.github+json' },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!r.ok) continue;
+        const j = await r.json();
+        const content = Buffer.from(j.content, 'base64').toString('utf8');
+        const source = clean(content.match(/^source:\s*(.+)$/m)?.[1]);
+        const srcTitle = clean(content.match(/^sourceTitle:\s*(.+)$/m)?.[1]);
+        const title = srcTitle || clean(content.match(/^title:\s*(.+)$/m)?.[1]);
+        if (title) seen.add(`${source}|${title}`);
+      } catch {
+        /* 单条失败忽略 */
+      }
+    }
+    console.log(`[run] 已合并远程 main 去重键 ${paths.length} 个`);
+  } catch (e) {
+    console.warn('[run] 合并远程去重键失败（忽略）:', e.message);
+  }
 }
 
 // ---------- 关键词命中 ----------
@@ -289,6 +333,8 @@ async function processEntry(source, item) {
 // ---------- 主流程 ----------
 async function main() {
   const existing = loadExisting();
+  // 合并远程 main 去重键，避免干净工作区重复抓取
+  await mergeRemoteKeys(existing);
   const enabled = SOURCES.filter((s) => s.enabled && s.url);
   const created = [];
   const skipped = [];
