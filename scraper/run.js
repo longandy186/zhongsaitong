@@ -4,6 +4,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
@@ -366,13 +367,20 @@ async function main() {
           continue;
         }
 
-        // 写入文件
+        // 写入文件：文件名基于内容哈希（而非序号），杜绝「不同源同序号 → 覆盖已发布文件」的碰撞
         const d = item.pubDate ?? new Date();
         const datePrefix = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(
           d.getDate()
         ).padStart(2, '0')}`;
         const slug = source.name.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').slice(-6) || 'src';
-        const filename = `${datePrefix}-${slug}-${created.length + 1}.md`;
+        const hash = createHash('sha1').update(`${source.name}|${item.title}`).digest('hex').slice(0, 6);
+        const filename = `${datePrefix}-${slug}-${hash}.md`;
+        // 若文件已存在（内容同源同标题），保留既有文件及其发布状态，跳过本次重写，防止覆盖已发布条目
+        if (fs.existsSync(path.join(ITEMS_DIR, filename))) {
+          skipped.push(item.title);
+          existing.add(`${source.name}|${item.title}`);
+          continue;
+        }
         const md = buildMd(entry);
         fs.writeFileSync(path.join(ITEMS_DIR, filename), md, 'utf8');
         existing.add(`${source.name}|${item.title}`);
