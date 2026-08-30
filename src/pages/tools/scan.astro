@@ -113,6 +113,22 @@ import Header from '../../components/Header.astro';
     }
   }
 
+  // 按视频真实比例调整取景容器 —— 消除 object-fit:cover 的裁剪，
+  // 保证取景框（inset 14%）所见区域 == 实际识别区域，手机/PC 表现一致
+  function syncStageRatio(): Promise<void> {
+    const stage = $('stage') as HTMLElement;
+    const apply = () => {
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (w && h) stage.style.aspectRatio = `${w} / ${h}`;
+    };
+    return new Promise((resolve) => {
+      if (video.videoWidth) { apply(); return resolve(); }
+      video.onloadedmetadata = () => { apply(); resolve(); };
+      setTimeout(() => { apply(); resolve(); }, 1500); // 兜底
+    });
+  }
+
   // ---------- 摄像头 ----------
   async function startCamera() {
     try {
@@ -122,6 +138,11 @@ import Header from '../../components/Header.astro';
       });
       video.srcObject = stream;
       await video.play();
+      await syncStageRatio();
+      // 前置摄像头镜像显示（符合直觉）；识别用原始帧，不受镜像影响
+      const track = stream.getVideoTracks()[0];
+      const facing = (track?.getSettings?.() as any)?.facingMode;
+      video.style.transform = facing === 'user' ? 'scaleX(-1)' : 'none';
       ($('btnStart') as HTMLButtonElement).hidden = true;
       ($('btnShoot') as HTMLButtonElement).hidden = false;
       ($('btnRetake') as HTMLButtonElement).hidden = true;
@@ -151,16 +172,49 @@ import Header from '../../components/Header.astro';
     });
   }
 
-  function extractNumber(text: string): number | null {
-    // 欧洲数字格式 12,99 或美式 12.99
-    const cleaned = text
+  // 解析金额：正确区分「千分位」与「小数点」
+  // 塞尔维亚价签常见 1.299（点=千分位，即 1299）、1.299,00（欧陆标准）、12,99（欧元）
+  function extractNumber(raw: string): number | null {
+    if (!raw) return null;
+    const text = String(raw)
       .replace(/[€$¥£]/g, ' ')
-      .replace(/\b(RS[D]?|DIN|EUR|USD|CNY|GBP|RSD)\b/gi, ' ')
+      .replace(/\b(RS[D]?|DIN|DINAR|EUR|USD|CNY|GBP)\b/gi, ' ')
       .replace(/[Oo](?=\d)/g, '0')
       .replace(/[Il](?=\d)/g, '1');
-    const m = cleaned.match(/-?\d{1,7}([.,]\d{1,2})?/);
-    if (!m) return null;
-    return parseFloat(m[0].replace(',', '.'));
+
+    const cands = text.match(/\d[\d.,\s]{0,12}\d|\d/g) || [];
+    let best: number | null = null;
+
+    for (const c of cands) {
+      let s = c.replace(/\s/g, '').replace(/[^\d.,]/g, '');
+      if (!/\d/.test(s)) continue;
+
+      const lastDot = s.lastIndexOf('.');
+      const lastCom = s.lastIndexOf(',');
+      let decSep: string | null = null;
+
+      if (lastDot > -1 && lastCom > -1) {
+        // 两种分隔符都出现 → 后出现的那个是小数点
+        decSep = lastDot > lastCom ? '.' : ',';
+      } else if (lastDot > -1 || lastCom > -1) {
+        const sep = lastDot > -1 ? '.' : ',';
+        const tail = s.slice(s.lastIndexOf(sep) + 1);
+        // 尾部恰好 3 位且整体是千分位分组（如 1.299、15.900）→ 视为千分位
+        decSep = tail.length === 3 && /^\d{1,3}[.,]/.test(s) ? null : sep;
+      }
+
+      let norm: string;
+      if (decSep) {
+        const other = decSep === '.' ? ',' : '.';
+        norm = s.split(other).join('').replace(decSep, '.');
+      } else {
+        norm = s.split('.').join('').split(',').join('');
+      }
+
+      const v = parseFloat(norm);
+      if (Number.isFinite(v) && v > 0 && (best === null || v > best)) best = v;
+    }
+    return best;
   }
 
   function guessCurrency(text: string): string | null {
@@ -171,6 +225,33 @@ import Header from '../../components/Header.astro';
     if (/¥|CNY|￥|元|RMB/.test(t)) return 'CNY';
     if (/£|GBP/.test(t)) return 'GBP';
     return null;
+  }
+
+  // 只裁剪取景框内区域 + 放大 + 灰度对比度增强，显著提升小字价签识别率
+  function preprocessFrame(src: HTMLCanvasElement, crop: { x: number; y: number; w: number; h: number }): HTMLCanvasElement {
+    const sx = src.width * crop.x;
+    const sy = src.height * crop.y;
+    const sw = src.width * crop.w;
+    const sh = src.height * crop.h;
+    const scale = 2; // 放大 2 倍
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(sw * scale));
+    out.height = Math.max(1, Math.round(sh * scale));
+    const c = out.getContext('2d')!;
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = 'high';
+    c.drawImage(src, sx, sy, sw, sh, 0, 0, out.width, out.height);
+    // 灰度化 + 对比度增强
+    const img = c.getImageData(0, 0, out.width, out.height);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      let g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      g = (g - 128) * 1.8 + 128; // 对比度 1.8x
+      g = g < 0 ? 0 : g > 255 ? 255 : g;
+      d[i] = d[i + 1] = d[i + 2] = g;
+    }
+    c.putImageData(img, 0, 0);
+    return out;
   }
 
   async function recognizeFromVideo() {
@@ -189,9 +270,22 @@ import Header from '../../components/Header.astro';
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(video, 0, 0, w, h);
 
+      // 只识别取景框内区域（inset 14% → 中间 72%），避免背景噪声干扰
+      const roi = preprocessFrame(canvas, { x: 0.14, y: 0.14, w: 0.72, h: 0.72 });
+
       setStatus('正在识别数字...');
       const worker = await Tesseract.createWorker('eng');
-      const { data } = await worker.recognize(canvas);
+      try {
+        await worker.setParameters({
+          // 只识别数字与价签常见字符，大幅降低误识
+          tessedit_char_whitelist: '0123456789.,€$dinRSD EURUSDCNYGBP/-',
+          // SPARSE_TEXT：零散文本模式，适合价签这种稀疏排布
+          tessedit_pageseg_mode: ((Tesseract as any).PSM?.SPARSE_TEXT ?? 11),
+        } as any);
+      } catch {
+        /* 参数不支持时忽略，仍用默认配置识别 */
+      }
+      const { data } = await worker.recognize(roi);
       await worker.terminate();
 
       const text: string = (data as any).text || '';
@@ -210,8 +304,8 @@ import Header from '../../components/Header.astro';
       setStatus(`识别失败：${e?.message ?? e}（请手动输入金额）`);
     } finally {
       ($('btnShoot') as HTMLButtonElement).disabled = false;
-      stopCamera();
-      video.srcObject = null;
+      // 冻结在最后一帧（不黑屏），方便用户核对拍到了什么；重拍时再释放摄像头
+      try { video.pause(); } catch { /* 忽略 */ }
       ($('btnShoot') as HTMLButtonElement).hidden = true;
       ($('btnRetake') as HTMLButtonElement).hidden = false;
     }
@@ -220,6 +314,7 @@ import Header from '../../components/Header.astro';
   function retake() {
     ($('btnRetake') as HTMLButtonElement).hidden = true;
     setStatus('重新开启摄像头…');
+    stopCamera(); // 先释放上一轮摄像头，避免设备占用
     startCamera();
   }
 
@@ -280,7 +375,7 @@ import Header from '../../components/Header.astro';
   }
   .corner {
     position: absolute; width: 18px; height: 18px;
-    border-color: var(--crimson, #E94560); border-style: solid; border-width: 0;
+    border-color: var(--wine, #7B1E3B); border-style: solid; border-width: 0;
   }
   .corner.tl { top: 0; left: 0; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 4px; }
   .corner.tr { top: 0; right: 0; border-top-width: 3px; border-right-width: 3px; border-top-right-radius: 4px; }
@@ -317,7 +412,7 @@ import Header from '../../components/Header.astro';
     border: 1px solid var(--border); border-radius: 14px; background: var(--card);
     color: var(--ink); outline: none;
   }
-  .scan-input input:focus { border-color: var(--crimson, #E94560); }
+  .scan-input input:focus { border-color: var(--wine, #7B1E3B); }
   .scan-input select {
     padding: 12px 10px; font-size: 14px; font-weight: 600;
     border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--ink);
@@ -342,4 +437,13 @@ import Header from '../../components/Header.astro';
   .res-card .amt { display: block; font-size: 19px; font-weight: 800; color: var(--ink); margin-top: 4px; font-variant-numeric: tabular-nums; }
 
   .back-link { display: inline-block; margin-top: 18px; font-size: 13px; color: var(--ash); }
+
+  /* 窄屏适配：避免「金额输入 + 币种选择」被挤压，与宽屏保持一致体验 */
+  @media (max-width: 400px) {
+    .scan-input .row { flex-direction: column; }
+    .scan-input select { min-width: 0; width: 100%; }
+    .scan-result { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .res-card { padding: 12px 8px; }
+    .res-card .amt { font-size: 17px; }
+  }
 </style>
