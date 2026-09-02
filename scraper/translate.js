@@ -34,6 +34,11 @@ try {
   /* .env 不存在则忽略 */
 }
 
+// 翻译/精炼时的正文输入长度上限（字符）。RSS 摘要 + 详情页正文合并后截断。
+export const AI_CONTENT_LIMIT = 4000;
+// 判定"内容太短、需要去抓详情页"的阈值（字符，去空白后）
+export const SHORT_CONTENT_THRESHOLD = 300;
+
 export function hasKey() {
   return PROVIDERS.some((p) => p.key());
 }
@@ -88,7 +93,7 @@ async function callAI(system, user) {
                 { role: 'user', content: user },
               ],
               temperature: 0.3,
-              max_tokens: 1024,
+              max_tokens: 2048,
             }),
             signal: AbortSignal.timeout(30000), // 30s 超时，防止 API 挂起卡死整个采集
           });
@@ -126,8 +131,8 @@ async function callAI(system, user) {
 export async function translateNews(title, content) {
   const text = await callAI(
     '你是中塞双语新闻编辑。将塞尔维亚语/英语新闻翻译成简体中文，并提取关键信息。' +
-      '必须严格输出 JSON，格式：{"title":"中文标题","summary":"80字以内中文摘要","tags":["标签1","标签2"]}。不要输出其他内容。',
-    `原标题：${title}\n原文：${content.slice(0, 1500)}`
+      '必须严格输出 JSON，格式：{"title":"中文标题","summary":"150-250字中文摘要（保留关键事实、数据、时间、地点，宁详勿略）","tags":["标签1","标签2"]}。不要输出其他内容。',
+    `原标题：${title}\n原文：${content.slice(0, AI_CONTENT_LIMIT)}`
   );
   return parseJson(text);
 }
@@ -137,9 +142,9 @@ export async function translateNews(title, content) {
  */
 export async function polishChinese(title, content) {
   const text = await callAI(
-    '你是中文新闻编辑。将给定新闻改写为更简洁、适合华人读者阅读的版本。' +
-      '必须严格输出 JSON，格式：{"title":"优化后的标题","summary":"80字以内摘要","tags":["标签1","标签2"]}。不要输出其他内容。',
-    `原标题：${title}\n正文：${content.slice(0, 1500)}`
+    '你是中文新闻编辑。将给定新闻改写为更简洁、适合华人读者阅读的版本，保留关键事实、数据、时间、地点。' +
+      '必须严格输出 JSON，格式：{"title":"优化后的标题","summary":"150-250字中文摘要（宁详勿略）","tags":["标签1","标签2"]}。不要输出其他内容。',
+    `原标题：${title}\n正文：${content.slice(0, AI_CONTENT_LIMIT)}`
   );
   return parseJson(text);
 }

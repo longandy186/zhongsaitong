@@ -8,12 +8,16 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
-import { SOURCES, TOPIC_KEYWORDS, BLOCK_WORDS } from './sources.js';
-import { translateNews, polishChinese, hasKey } from './translate.js';
+import { SOURCES, TOPIC_KEYWORDS, SR_TOPIC_KEYWORDS, BLOCK_WORDS } from './sources.js';
+import { translateNews, polishChinese, hasKey, SHORT_CONTENT_THRESHOLD } from './translate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ITEMS_DIR = path.resolve(__dirname, '../src/content/items');
 const STATE_FILE = path.join(__dirname, 'state.json');
+
+// 去重窗口（天）：窗口外的旧标题允许重新收录（避免"同题新闻发过一次就永远不抓"）
+const DEDUP_WINDOW_DAYS = 14;
+const DAY_MS = 86400000;
 
 // 加载本地 .env（GitHub Actions 中由 secrets 注入；已显式设置的环境变量优先级更高）
 try {
@@ -37,6 +41,7 @@ const parser = new Parser({
 //  2) 若配置了 GH_TOKEN（GitHub Actions 场景），再用 mergeRemoteKeys 拉取远程 main 的
 //     items 清单合并进去重集合，避免「干净 checkout 工作区只有远程部分内容 → 把已存在
 //     的新闻重新抓一遍」的重复。
+// 时间窗口：只对 DEDUP_WINDOW_DAYS 天内已发的同源同题去重；窗口外的旧题允许重新收录。
 function loadExisting() {
   const seen = new Set();
   const clean = (s) => (s ?? '').replace(/^"+|"+$/g, '').trim();
@@ -47,7 +52,19 @@ function loadExisting() {
       const source = clean(content.match(/^source:\s*(.+)$/m)?.[1]);
       const srcTitle = clean(content.match(/^sourceTitle:\s*(.+)$/m)?.[1]);
       const title = srcTitle || clean(content.match(/^title:\s*(.+)$/m)?.[1]);
-      if (title) seen.add(`${source}|${title}`);
+      if (!title) continue;
+      // 只把窗口内（近期）的标题加入去重集，窗口外旧题可重新抓
+      const dateM = content.match(/^date:\s*(\d{4}-\d{2}-\d{2})/m)?.[1];
+      let isRecent = false;
+      if (dateM) {
+        const diff = Date.now() - new Date(dateM).getTime();
+        isRecent = diff >= 0 && diff < DEDUP_WINDOW_DAYS * DAY_MS;
+      } else {
+        // 无日期字段的旧文件，按文件修改时间判断
+        const mtime = fs.statSync(path.join(ITEMS_DIR, f)).mtimeMs;
+        isRecent = Date.now() - mtime < DEDUP_WINDOW_DAYS * DAY_MS;
+      }
+      if (isRecent) seen.add(`${source}|${title}`);
     }
   }
   return seen;
@@ -81,7 +98,15 @@ async function mergeRemoteKeys(seen) {
         const source = clean(content.match(/^source:\s*(.+)$/m)?.[1]);
         const srcTitle = clean(content.match(/^sourceTitle:\s*(.+)$/m)?.[1]);
         const title = srcTitle || clean(content.match(/^title:\s*(.+)$/m)?.[1]);
-        if (title) seen.add(`${source}|${title}`);
+        if (!title) continue;
+        // 同本地逻辑：只对窗口内（14 天）的标题去重，旧题允许重新收录
+        const dateM = content.match(/^date:\s*(\d{4}-\d{2}-\d{2})/m)?.[1];
+        let isRecent = false;
+        if (dateM) {
+          const diff = Date.now() - new Date(dateM).getTime();
+          isRecent = diff >= 0 && diff < DEDUP_WINDOW_DAYS * DAY_MS;
+        }
+        if (isRecent) seen.add(`${source}|${title}`);
       } catch {
         /* 单条失败忽略 */
       }
@@ -122,6 +147,32 @@ function extractRental(text) {
   const locM = t.match(/(?:位于|地点|区域|在|靠近|近)\s*([一-龥A-Za-z·]+?)(?:区|市|附近|一带|周边|站|中心)/);
   const location = locM ? locM[1] : '';
   return { price, location };
+}
+
+// ---------- 详情页补全文 ----------
+// RSS 摘要通常只有 1-2 句话，导致翻译/精炼后正文太短。
+// 对配置了 articleSelector 的源（塞语媒体），抓详情页正文补进 content，AI 翻译才有足够素材。
+async function fetchFullArticle(item, selector) {
+  if (!item.link || !selector) return '';
+  try {
+    const resp = await fetch(item.link, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return '';
+    const html = await resp.text();
+    const $ = cheerio.load(html);
+    // 正文：优先选择器；取不到就退回 <article> 标签
+    const $body = $(selector).first().length ? $(selector).first() : $('article').first();
+    const text = $body.text()
+      .replace(/\s+/g, ' ')          // 压缩空白
+      .replace(/Foto:\s*\S+/gi, '')  // 去掉"Foto: xxx"图注
+      .replace(/^(Uz video|Video|Foto|Pogledajte)\b.*?$/gm, '')
+      .trim();
+    return text.slice(0, 4000);      // 上限 4000 字符，与 AI 输入上限对齐
+  } catch {
+    return '';  // 详情页失败静默，回退 RSS 摘要
+  }
 }
 
 // ---------- HTML 抓取（使馆公告） ----------
@@ -207,9 +258,13 @@ async function fetchRssSource(source) {
       pubDate: it.isoDate ? new Date(it.isoDate) : new Date(),
     }))
     .filter((it) => it.title && !seenLinks.has(it.link) && seenLinks.add(it.link));
-  // 关键词过滤：源显式给了 keywords 才过滤；空 keywords 表示全量收录
-  // （塞语本地媒体全量翻译，中文国际媒体按中塞关键词筛）
-  const keywords = source.keywords ?? [];
+  // 关键词过滤：
+  //  - 源显式给了 keywords → 按源关键词过滤（中文国际媒体按中塞关键词筛）
+  //  - 空 keywords：
+  //    · 塞语源（lang='sr'）→ 回退 SR_TOPIC_KEYWORDS（中塞+实用主题），避免全量翻译浪费 token
+  //    · 其他（使馆公告等）→ 全量收录
+  let keywords = source.keywords ?? [];
+  if (!keywords.length && source.lang === 'sr') keywords = SR_TOPIC_KEYWORDS;
   const filtered = keywords.length
     ? items.filter((it) => hitKeywords(`${it.title} ${it.content}`, keywords))
     : items;
@@ -276,7 +331,7 @@ async function processEntry(source, item) {
   if (FUNCTIONAL_TITLES.some((w) => item.title.includes(w))) return null;
 
   let finalTitle = item.title;
-  let summary = item.content.slice(0, 150);
+  let summary = item.content.slice(0, 400);
   let tags = null;
   let note = '';
   let price, location, contact;
@@ -290,7 +345,13 @@ async function processEntry(source, item) {
     }
   } else if (source.lang === 'sr') {
     // 塞尔维亚语 → 中文翻译
-    const t = await translateNews(item.title, item.content);
+    // RSS 摘要太短（低于阈值）且配置了 articleSelector 时，抓详情页补全文，翻译才有素材
+    let content = item.content;
+    if (content.replace(/\s+/g, '').length < SHORT_CONTENT_THRESHOLD && source.articleSelector) {
+      const full = await fetchFullArticle(item, source.articleSelector);
+      if (full) content = full;
+    }
+    const t = await translateNews(item.title, content);
     if (t) {
       finalTitle = t.title;
       summary = t.summary;
@@ -302,7 +363,13 @@ async function processEntry(source, item) {
     }
   } else if (hasKey()) {
     // 中文源精炼
-    const p = await polishChinese(item.title, item.content.slice(0, 1500));
+    // 中文源同样在摘要太短时抓详情页补全文（新华/人民等正文长，精炼后更充实）
+    let content = item.content;
+    if (content.replace(/\s+/g, '').length < SHORT_CONTENT_THRESHOLD && source.articleSelector) {
+      const full = await fetchFullArticle(item, source.articleSelector);
+      if (full) content = full;
+    }
+    const p = await polishChinese(item.title, content);
     if (p?.title) {
       finalTitle = p.title;
       if (p.summary) summary = p.summary;

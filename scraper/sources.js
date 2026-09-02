@@ -65,8 +65,9 @@ export const SOURCES = [
     category: 'news',
     kind: 'news',
     lang: 'sr',
-    keywords: [], // 空=全量收录（塞语本地媒体）
-    maxItems: 15,
+    keywords: [], // 空=用 SR_TOPIC_KEYWORDS 过滤（中塞+实用主题）
+    articleSelector: '.article-content', // RSS 摘要太短时抓详情页补全文
+    maxItems: 40,
     enabled: true,
   },
   // ---- 以下源需额外配置后启用 ----
@@ -106,16 +107,16 @@ export const SOURCES = [
     autoPublish: true,
     enabled: false,
   },
-  // ---- 塞尔维亚本地媒体（塞语，自动翻译；空 keywords=回退 TOPIC_KEYWORDS 中塞相关过滤）----
+  // ---- 塞尔维亚本地媒体（塞语，自动翻译；空 keywords=回退 SR_TOPIC_KEYWORDS 中塞相关过滤）----
   {
     name: 'B92-塞尔维亚媒体',
     type: 'rss',
-    url: 'https://www.b92.net/feed/',
+    url: 'https://www.b92.net/info/rss/vesti.xml', // 分类"新闻"feed，避免首页混入子站娱乐/八卦内容
     category: 'news',
     kind: 'news',
     lang: 'sr',
-    keywords: [], // 空=全量收录（塞语本地媒体）
-    maxItems: 10,
+    keywords: [], // 空=用 SR_TOPIC_KEYWORDS 过滤
+    maxItems: 25,
     enabled: true,
   },
   {
@@ -125,8 +126,33 @@ export const SOURCES = [
     category: 'news',
     kind: 'news',
     lang: 'sr',
-    keywords: [], // 空=全量收录（塞语本地媒体）
-    maxItems: 10,
+    keywords: [], // 空=用 SR_TOPIC_KEYWORDS 过滤
+    articleSelector: '.post-content', // RSS 摘要太短时抓详情页补全文
+    maxItems: 25,
+    enabled: true,
+  },
+  // ---- 新增：塞国头部媒体（2026-09-02 验证可用）----
+  {
+    name: 'RTS-塞尔维亚国家电视台',
+    type: 'rss',
+    url: 'https://www.rts.rs/page/stories/sr/rss.html',
+    category: 'news',
+    kind: 'news',
+    lang: 'sr',
+    keywords: [], // 空=用 SR_TOPIC_KEYWORDS 过滤
+    maxItems: 20,
+    enabled: true,
+  },
+  {
+    name: 'Nova-塞尔维亚媒体',
+    type: 'rss',
+    url: 'https://nova.rs/feed/',
+    category: 'news',
+    kind: 'news',
+    lang: 'sr',
+    keywords: [], // 空=用 SR_TOPIC_KEYWORDS 过滤
+    articleSelector: 'article', // RSS 摘要太短时抓详情页补全文
+    maxItems: 25,
     enabled: true,
   },
   // ---- 以下源暂不可用，条件具备后启用 ----
@@ -157,6 +183,58 @@ export const TOPIC_KEYWORDS = [
   '塞尔维亚', '塞国', '贝尔格莱德', '中塞', '匈塞', '尼什', '诺维萨德', '苏博蒂察',
   '华商', '赴塞', '在塞', '塞华人', '巴尔干',
   'Serbia', 'Serbian', 'Belgrade', 'China-Serbia', 'Kina', 'Kineski', 'kinesk',
+];
+
+// 塞语源的收录过滤词（塞语源 keywords=[] 时用这张表，避免全量翻译浪费 token、堆审核积压）
+// 覆盖：中塞关系 / 中国相关 / 经济 / 基建 / 民生实用（签证居留物价医疗等）/ 旅游
+// 注意：塞尔维亚媒体双字母制——Politika/RTS 等用西里尔，B92/Danas/Nova 用拉丁，两张表都要有
+export const SR_TOPIC_KEYWORDS = [
+  // ===== 拉丁字母变体 =====
+  // 中塞关系与中国（塞语"中国"=Kina，"中国的"=kineski/kineska/kinesko）
+  'Kina', 'kinesk', 'Kineska', 'Kineski', 'Kineske', 'Srbija-Kina',
+  'Xi Jinping', 'Huawei', 'ZTE', 'China', 'kineska kompanija', 'kineske kompanije',
+  // 经济与企业
+  'privreda', 'privredn', 'ekonomij', 'ekonomsk', 'investicij', 'investir', 'fabrika',
+  'kompanij', 'preduzeće', 'banka', 'banke', 'finansij', 'kurs', 'inflacija', 'plate',
+  'poresk', 'porez', 'budžet', 'budžetsk', 'trgovin', 'izvoz', 'uvoz', 'zaposlen', 'nezaposlenost',
+  // 基建与重大项目
+  'auto-put', 'autoput', 'železnic', 'brza pruga', 'pruga', 'most', 'aerodrom', 'luka',
+  'gradilišt', 'infrastruktura', 'energetik', 'gasovod', 'naftovod', 'zelena energija',
+  'vetropark', 'solarn', 'rudnik', 'lithium', 'litijum', 'Rio Tinto',
+  // 欧盟与签证（注意：不直接用 'EU'——两字母小写会误命中 neutral/euro 等）
+  'Evropska unija', 'evropska unija', 'evropsk', 'pristupn', 'integracij', 'viz', 'šengen',
+  'Šengen', 'granic', 'putovnica', 'pasoš', 'boravak', 'radna dozvola', 'dozvola za rad',
+  // 民生与生活
+  'stan', 'stanova', 'nekretnin', 'kirija', 'cena', 'cene', 'stanarin', 'račun',
+  'zdravstvo', 'zdravstven', 'bolnic', 'lekar', 'lekari', 'apotek', 'vakcin',
+  'škola', 'školstv', 'fakultet', 'obrazovanj', 'vrtić', 'prevoz', 'javni prevoz',
+  'gradski prevoz', 'metro', 'taksi', 'parking', 'saobraćaj', 'bezbednost', 'vremenska prognoza',
+  // 旅游与文化
+  'turizam', 'turističk', 'EXPO', 'EXPO 2027', 'manifestacij', 'festival', 'sajam',
+  'hotel', 'restoran', 'muzej', 'beograd', 'Novi Sad', 'Niš', 'Kragujevac', 'Subotica',
+  // ===== 西里尔字母变体（Politika/RTS 等）=====
+  // 中塞关系与中国
+  'Кина', 'кинеск', 'Кинеска', 'Кинески', 'Кинеске', 'кинеска компанија',
+  'Си Ђинпинг', 'Хуавеј', 'Кина-Србија',
+  // 经济与企业
+  'привреда', 'привредн', 'економиј', 'економск', 'инвестициј', 'фабрика',
+  'компаниј', 'предузеће', 'банка', 'банке', 'финансиј', 'инфлација', 'плате',
+  'пореск', 'порез', 'буџет', 'буџетск', 'трговин', 'извоз', 'увоз', 'запослен', 'незапосленост',
+  // 基建与重大项目
+  'аутопут', 'железниц', 'брза пруга', 'пруга', 'мост', 'аеродром', 'лука',
+  'градилишт', 'инфраструктура', 'енергетик', 'гасовод', 'нафтовод', 'зелена енергија',
+  'ветропарк', 'соларн', 'рудник', 'литијум', 'Рио Тинто',
+  // 欧盟与签证
+  'Европска унија', 'европска унија', 'европск', 'приступн', 'интеграциј', 'виз', 'шенген',
+  'границ', 'путовница', 'пасош', 'боравак', 'радна дозвола', 'дозвола за рад',
+  // 民生与生活
+  'стан', 'станова', 'некретнин', 'кирија', 'цена', 'цене', 'станарин', 'рачун',
+  'здравство', 'здравствен', 'болниц', 'лекар', 'лекари', 'апотек', 'вакцин',
+  'школа', 'школств', 'факултет', 'образовањ', 'вртић', 'превоз', 'јавни превоз',
+  'градски превоз', 'метро', 'такси', 'паркинг', 'саобраћај', 'безбедност', 'временска прогноза',
+  // 旅游与文化
+  'туризам', 'туристичк', 'ЕКСПО', 'манифестациј', 'фестивал', 'сајам',
+  'хотел', 'ресторан', 'музеј', 'београд', 'Нови Сад', 'Ниш', 'Крагујевац', 'Суботица',
 ];
 
 // 需要人工审核的敏感词（命中则跳过，避免误发）
