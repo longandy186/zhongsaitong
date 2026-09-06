@@ -1,6 +1,8 @@
 name: Auto Scrape
 
 # 定时自动采集（每天四次：北京 08:00 / 14:00 / 20:00 / 02:00 = UTC 0 / 6 / 12 / 18）+ 手动触发
+# 抓取每天 4 次保内容量；审核通知只在 UTC 0/12（北京 08:00 / 20:00）两轮推送，
+# notify.js 会推「所有未推送的 pending」，其余轮次抓的新内容自动攒到下一通知轮，最长延迟 6 小时。
 on:
   schedule:
     - cron: '0 0,6,12,18 * * *'
@@ -43,10 +45,16 @@ jobs:
             git push
           fi
 
+      - name: Check notify window
+        # 通知只在 UTC 0 / 12（北京 08:00 / 20:00）两轮执行；其余轮次仅抓取入库，不打扰审核
+        id: win
+        run: echo "hour=$(date -u +%H)" >> "$GITHUB_OUTPUT"
+
       - name: Notify pending for review
-        # 抓取后把「本轮新增」的 pending 草稿推送到审核渠道（飞书/微信/WhatsApp）。
+        # 抓取后把「未推送过」的 pending 草稿推送到审核渠道（飞书/微信/WhatsApp）。
         # notify.js 用 notify-state.json 记录已推送条目，只推新增、不重复发；
         # 如需全量重推：加 --force。
+        if: steps.win.outputs.hour == '0' || steps.win.outputs.hour == '12'
         run: cd scraper && node notify.js
         env:
           NOTIFY_CHANNEL: ${{ secrets.NOTIFY_CHANNEL }}
@@ -62,6 +70,7 @@ jobs:
 
       - name: Commit notify state
         # 把 notify-state.json 提交回去，保证下次运行时已推送状态不丢失（防重复发）。
+        if: steps.win.outputs.hour == '0' || steps.win.outputs.hour == '12'
         run: |
           git add scraper/notify-state.json
           if git diff --cached --quiet; then
