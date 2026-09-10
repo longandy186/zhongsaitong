@@ -10,5 +10,8 @@ scraper/node_modules/
 scraper/state.json
 scraper/.env
 
+# WorkBuddy 项目记忆/自动化数据（含运营细节，不入仓库）
+.workbuddy/
+
 # Cloudflare 本地构建缓存
 .wrangler/

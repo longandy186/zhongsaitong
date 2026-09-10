@@ -1,12 +1,19 @@
 name: Auto Scrape
 
-# 定时自动采集（每天四次：北京 08:00 / 14:00 / 20:00 / 02:00 = UTC 0 / 6 / 12 / 18）+ 手动触发
+# 定时自动采集（每天两次：北京 07:00 / 19:00 = UTC 23 / 11）+ 手动触发
+#
+# 时间安排说明：
+#   抓取 北京 07:00 / 19:00，审核通知 北京 08:00 / 20:00（见 notify.yml），故意错开 1 小时，
+#   保证每批通知推送时本轮抓取的内容都已入库。
+#   频率从每天 4 次降为 2 次：采集量长期超出人工审核速度，2026-09-10 积压达 1049 条，
+#   降频 + archive-stale.js 自动归档超期 pending 双管齐下收敛队列。
+#
 # 说明：本 workflow 只负责抓取入库；审核通知已拆到 notify.yml 独立运行。
 # 原因：GitHub Actions 的 schedule 常有 1~4 小时延迟，若在流程内用「实际运行时刻」
 # 判断通知窗口会全部落空（2026-09-07 踩过这个坑）。
 on:
   schedule:
-    - cron: '0 0,6,12,18 * * *'
+    - cron: '0 23,11 * * *'
   workflow_dispatch:
 
 jobs:
@@ -33,6 +40,11 @@ jobs:
           # 用于远程 main 去重（run.js 合并远程 items 键，避免重复抓取）
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
+
+      - name: Archive stale pending
+        # 把「新闻日期超过 7 天仍未审核」的 pending 翻为 expired，防止审核队列无限膨胀。
+        # 只改文件不删除，可逆；变更会随下面的 Commit & push 一起提交。
+        run: cd scraper && node archive-stale.js --days 7
 
       - name: Commit & push
         run: |
