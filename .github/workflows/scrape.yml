@@ -1,8 +1,9 @@
 name: Auto Scrape
 
 # 定时自动采集（每天四次：北京 08:00 / 14:00 / 20:00 / 02:00 = UTC 0 / 6 / 12 / 18）+ 手动触发
-# 抓取每天 4 次保内容量；审核通知只在 UTC 0/12（北京 08:00 / 20:00）两轮推送，
-# notify.js 会推「所有未推送的 pending」，其余轮次抓的新内容自动攒到下一通知轮，最长延迟 6 小时。
+# 说明：本 workflow 只负责抓取入库；审核通知已拆到 notify.yml 独立运行。
+# 原因：GitHub Actions 的 schedule 常有 1~4 小时延迟，若在流程内用「实际运行时刻」
+# 判断通知窗口会全部落空（2026-09-07 踩过这个坑）。
 on:
   schedule:
     - cron: '0 0,6,12,18 * * *'
@@ -42,40 +43,5 @@ jobs:
             echo "无新内容，跳过提交"
           else
             git commit -m "chore: auto-scrape $(date +%Y-%m-%d)"
-            git push
-          fi
-
-      - name: Check notify window
-        # 通知只在 UTC 0 / 12（北京 08:00 / 20:00）两轮执行；其余轮次仅抓取入库，不打扰审核
-        id: win
-        run: echo "hour=$(date -u +%H)" >> "$GITHUB_OUTPUT"
-
-      - name: Notify pending for review
-        # 抓取后把「未推送过」的 pending 草稿推送到审核渠道（飞书/微信/WhatsApp）。
-        # notify.js 用 notify-state.json 记录已推送条目，只推新增、不重复发；
-        # 如需全量重推：加 --force。
-        if: steps.win.outputs.hour == '0' || steps.win.outputs.hour == '12'
-        run: cd scraper && node notify.js
-        env:
-          NOTIFY_CHANNEL: ${{ secrets.NOTIFY_CHANNEL }}
-          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
-          WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
-          WECHAT_APPSECRET: ${{ secrets.WECHAT_APPSECRET }}
-          WECHAT_TO_OPENID: ${{ secrets.WECHAT_TO_OPENID }}
-          APPROVE_URL: ${{ secrets.APPROVE_URL }}
-          APPROVE_SECRET: ${{ secrets.APPROVE_SECRET }}
-          # 供 notify.js 从远程读取真实 pending 清单
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_REPO: ${{ github.repository }}
-
-      - name: Commit notify state
-        # 把 notify-state.json 提交回去，保证下次运行时已推送状态不丢失（防重复发）。
-        if: steps.win.outputs.hour == '0' || steps.win.outputs.hour == '12'
-        run: |
-          git add scraper/notify-state.json
-          if git diff --cached --quiet; then
-            echo "状态无变化，跳过提交"
-          else
-            git commit -m "chore: sync notify state $(date +%Y-%m-%d)"
             git push
           fi

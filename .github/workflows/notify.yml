@@ -1,0 +1,60 @@
+name: Notify Pending Review
+
+# 审核通知：每天两次（北京 08:00 / 20:00 = UTC 0 / 12）+ 手动触发
+#
+# 为什么独立于 scrape.yml：
+#   GitHub Actions 的 schedule 常有 1~4 小时延迟（实测 12:00 UTC 的轮次 15:24 才跑）。
+#   2026-09-07 曾把通知内联进抓取流程、用 `date -u +%H` 判断「当前是否通知窗口」，
+#   结果延迟导致判断全部落空、通知被静默跳过。改为独立 cron 后不再依赖运行时刻：
+#   即使延迟，每天仍稳定跑 2 次。notify.js 推的是「所有未推送过的 pending」，
+#   因此其余抓取轮次（14:00 / 02:00）产生的新内容会自动攒到这两批一起推，不会漏。
+on:
+  schedule:
+    - cron: '0 0,12 * * *'
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install scraper deps
+        run: cd scraper && npm install --no-audit --no-fund
+
+      - name: Notify pending for review
+        # notify.js 优先从 GitHub 远程读取真实 pending 清单（与审核发布同源），
+        # 再用 notify-state.json 过滤掉已推送过的条目，只推新增、不重复发。
+        # 如需全量重推：给命令加 --force。
+        run: cd scraper && node notify.js
+        env:
+          NOTIFY_CHANNEL: ${{ secrets.NOTIFY_CHANNEL }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          WECHAT_APPID: ${{ secrets.WECHAT_APPID }}
+          WECHAT_APPSECRET: ${{ secrets.WECHAT_APPSECRET }}
+          WECHAT_TO_OPENID: ${{ secrets.WECHAT_TO_OPENID }}
+          APPROVE_URL: ${{ secrets.APPROVE_URL }}
+          APPROVE_SECRET: ${{ secrets.APPROVE_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Commit notify state
+        # 把 notify-state.json 提交回去，保证下次运行时已推送状态不丢失（防重复发）。
+        # 抓取 workflow 可能同时在推送，故提交前先 rebase，避免 non-fast-forward 失败。
+        run: |
+          git config user.name "zst-bot"
+          git config user.email "bot@zhongsaitong.local"
+          git add scraper/notify-state.json
+          if git diff --cached --quiet; then
+            echo "状态无变化，跳过提交"
+          else
+            git commit -m "chore: sync notify state $(date +%Y-%m-%d)"
+            git pull --rebase origin main
+            git push
+          fi
