@@ -168,7 +168,11 @@ export async function onRequestGet({ request, env }) {
       continue;
     }
 
-    const newStatus = mode === 'publish' ? 'active' : 'rejected';
+    // 注意：status 必须落在 content collection schema 的 enum 内
+    // （active | pending | expired | done）。早前这里误写 'rejected'，
+    // 一点「跳过」就会让整站构建失败（Invalid enum value），故统一用 'expired'：
+    // 语义等同于「不发布」，且与 scraper/archive-stale.js 的归档状态一致。
+    const newStatus = mode === 'publish' ? 'active' : 'expired';
     const newContent0 = content.replace(/^status:\s*pending\s*$/m, `status: ${newStatus}`);
     if (newContent0 === content) {
       results.push(`${tid}: 状态未变(已处理过或非 pending)`);
