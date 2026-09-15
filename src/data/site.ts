@@ -5,6 +5,11 @@ export const SITE = {
   description: '面向塞尔维亚华人的信息服务平台：租房、二手、招聘、中塞新闻、生活指南、供求对接',
   url: 'https://zhongsaitong.com',
   email: 'longandy2026@gmail.com',
+  // Cloudflare Web Analytics beacon token（浏览互动统计：停留时长 / 滚动 / 点击）
+  // 留空 = 不埋点；填上后到 CF 后台 Analytics & Logs → Web Analytics 就能看互动数据。
+  // ⚠️ 该 token 本身公开（写在客户端 JS 里），不属机密。
+  // ⚠️ 若在 CF 后台对该 Pages 项目启用了「自动注入」，此处必须留空，否则重复计数。
+  cfBeaconToken: '',
 };
 
 // 信息流 Tab（7 个分类）
@@ -60,3 +65,4 @@ export const AD_URL = '/advertise/';
 
 // 表单接收端（formsubmit.co 免费版：填入接收邮箱，如 https://formsubmit.co/your@email.com）
 export const FORM_ENDPOINT = 'https://formsubmit.co/longandy2026@gmail.com';
+

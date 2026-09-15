@@ -1,0 +1,168 @@
+---
+// 404 页面
+// 作用：让不存在的路径真正返回 HTTP 404（此前缺失本文件 → 无 dist/404.html
+// → Cloudflare Pages 用 index.html 兜底并返回 200「软 404」，导致：
+//   ① 扫描器/垃圾路径被当成正常页收录 ② 流量统计严重失真 ③ 每次探测白耗 ~280KB 流量）
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+
+const quickLinks = [
+  { href: '/', title: '首页', desc: '最新要闻与信息流' },
+  { href: '/news/', title: '中塞要闻', desc: '使馆 / 商会 / 媒体动态' },
+  { href: '/rentals/', title: '租房房源', desc: '贝尔格莱德及各地房源' },
+  { href: '/jobs/', title: '招聘求职', desc: '华人企业与本地岗位' },
+  { href: '/guide/', title: '生活指南', desc: '签证 / 驾照 / 医保 / 租房避坑' },
+  { href: '/tools/', title: '实用工具', desc: '汇率换算 / 天气 / 价签扫描' },
+  { href: '/secondhand/', title: '二手买卖', desc: '闲置转让与求购' },
+  { href: '/links/', title: '常用电话网址', desc: '应急 / 医疗 / 交通索引' },
+];
+---
+
+<Base title="页面不存在（404）· 中塞通" description="你访问的页面不存在或已下线，可以从下方入口继续浏览中塞通。" noindex>
+  <Header active="" />
+
+  <section class="nf">
+    <div class="nf-code">404</div>
+    <h1>这个页面不存在</h1>
+    <p>
+      链接可能已经失效、内容被撤下，或者网址输错了。<br />
+      试试下面的入口，或者用上方搜索框直接找。
+    </p>
+
+    <div class="nf-actions">
+      <a class="nf-btn primary" href="/">回到首页</a>
+      <a class="nf-btn" href="/guide/">看生活指南</a>
+      <a class="nf-btn" href="/publish/">发布信息</a>
+    </div>
+  </section>
+
+  <section class="nf-grid-wrap">
+    <h2 class="section-title">你可能想找</h2>
+    <div class="nf-grid">
+      {
+        quickLinks.map((l) => (
+          <a class="nf-card" href={l.href}>
+            <div class="nf-card-title">{l.title}</div>
+            <div class="nf-card-desc">{l.desc}</div>
+          </a>
+        ))
+      }
+    </div>
+  </section>
+
+  <p class="nf-tip">
+    如果你确定这个网址应该能打开，<a href="/about/">告诉我们</a>。
+  </p>
+</Base>
+
+<style>
+  .nf {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 48px 16px 8px;
+    text-align: center;
+  }
+  @media (min-width: 1024px) {
+    .nf { padding: 72px 0 12px; }
+  }
+  .nf-code {
+    font-size: 88px;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -4px;
+    color: var(--wine);
+    opacity: 0.16;
+    user-select: none;
+  }
+  .nf h1 {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--ink);
+    letter-spacing: -0.5px;
+    margin-top: -18px;
+  }
+  .nf p {
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+    margin-top: 12px;
+  }
+  .nf-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 24px;
+  }
+  .nf-btn {
+    display: inline-block;
+    padding: 9px 20px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--wine);
+    background: var(--pink-soft);
+    border: 1px solid transparent;
+    transition: background 0.2s, color 0.2s;
+  }
+  .nf-btn:hover { background: var(--pink); color: #fff; }
+  .nf-btn.primary { background: var(--wine); color: #fff; }
+  .nf-btn.primary:hover { background: var(--wine-deep); }
+
+  .nf-grid-wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 8px 16px 0;
+  }
+  @media (min-width: 1024px) {
+    .nf-grid-wrap { padding: 8px 0 0; }
+  }
+  .nf-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  @media (min-width: 640px) {
+    .nf-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (min-width: 1024px) {
+    .nf-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+  .nf-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+  }
+  .nf-card:hover {
+    border-color: var(--wine);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .nf-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .nf-card-desc {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+  }
+
+  .nf-tip {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    padding: 28px 16px 48px;
+  }
+  .nf-tip a {
+    color: var(--wine);
+    font-weight: 600;
+    border-bottom: 1px solid currentColor;
+  }
+</style>

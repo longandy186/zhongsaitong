@@ -4,15 +4,19 @@ interface Props {
   title?: string;
   description?: string;
   canonical?: string; // 覆盖默认 canonical（用于旧 /post/ 页指向新 URL）
+  noindex?: boolean; // 不进搜索引擎索引（404 等），同时不输出 canonical
 }
 const {
   title = `${SITE.name} · ${SITE.tagline}`,
   description = SITE.description,
   canonical: canonicalProp,
+  noindex = false,
 } = Astro.props;
 const canonical = canonicalProp
   ? new URL(canonicalProp, SITE.url).href
   : new URL(Astro.url.pathname, SITE.url).href;
+// Cloudflare Web Analytics：token 为空则不输出 beacon（避免误报/重复计数）
+const cfBeaconToken = SITE.cfBeaconToken;
 ---
 
 <!DOCTYPE html>
@@ -27,7 +31,17 @@ const canonical = canonicalProp
     <meta property="og:site_name" content="中塞通" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
-    <link rel="canonical" href={canonical} />
+    {noindex ? <meta name="robots" content="noindex, follow" /> : <link rel="canonical" href={canonical} />}
+    {
+      cfBeaconToken && (
+        <script
+          defer
+          is:inline
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon={`{"token":"${cfBeaconToken}"}`}
+        />
+      )
+    }
     <script type="application/ld+json" is:inline>
       {
         "@context": "https://schema.org",
