@@ -146,7 +146,7 @@ def main():
             print(f"  ⚠️ 失败: {e}")
 
     dim("热门页面", "clientRequestPath", 15)
-    dim("流量来源", "refererHost", 12)
+    dim("流量来源", "clientRefererHost", 12)
     dim("访客国家", "clientCountryName", 12)
     dim("设备类型", "clientDeviceType", 5)
     dim("响应状态码", "edgeResponseStatus", 8)
