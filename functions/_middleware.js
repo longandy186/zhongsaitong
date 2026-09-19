@@ -24,7 +24,7 @@ const SCANNER_PATH = [
   /\.(env|env\.[a-z0-9]+|sql|sql\.gz|dump|bak|backup|old|orig|save|swp|swo|log|ini|conf|cfg|yml|yaml|tfstate|pem|ppk|htaccess|htpasswd)$/i,
   /(^|\/)\.(git|svn|hg|bzr|aws|ssh|docker|idea|vscode|npmrc|htpasswd)(\/|$)/i,
   // 建站程序
-  /^\/(wp-admin|wp-content|wp-includes|wp-json|wp-login|wp-config|wp-cron|wp-backup|wordpress|xmlrpc\.php|wlwmanifest\.xml)/i,
+  /^\/(wp|wp-admin|wp-content|wp-includes|wp-json|wp-login|wp-config|wp-cron|wp-backup|wordpress|xmlrpc\.php|wlwmanifest\.xml)(\/|$|\.)/i,
   /^\/(administrator|components\/com_|modules\/mod_|templates\/|language\/[a-z]{2}-[A-Z]{2}\.)/i,
   /^\/(drush|vendor|laravel|thinkphp|yii|symfony|drupal|joomla|typo3|magento|prestashop|opencart|moodle|lms)\b/i,
   // 数据库 / 中间件管理面板
