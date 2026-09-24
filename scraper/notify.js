@@ -107,6 +107,8 @@ function parseFrontmatter(raw, id) {
     date: get('date'),
     scrapedAt: get('scrapedAt'),
     batch: deriveBatch(id),
+    // AI 相关度 0-10（老条目没有该字段 → null）
+    relevance: Number.isFinite(Number(get('relevance'))) && get('relevance') !== '' ? Number(get('relevance')) : null,
   };
 }
 
@@ -228,11 +230,14 @@ function buildMarkdown(items, opts = {}) {
       if (!gl.length) continue;
       const emoji = g === '中塞' ? '🟥' : g === '生活' ? '🟦' : '⬜';
       md += `#### ${emoji} ${g}（${gl.length}）\n`;
+      // 分数高的排前面，方便有限时间里先审最值得发的
+      gl.sort((a, b) => (b.relevance ?? -1) - (a.relevance ?? -1) || String(b.id).localeCompare(String(a.id)));
       for (const it of gl) {
         const pub = approveUrl('publish', it.id);
         const skip = approveUrl('skip', it.id);
         const scrapeT = it.scrapedAt ? fmtTime(it.scrapedAt) : (it.date || '未记录');
-        md += `- 🕓 **抓取 ${scrapeT}**　${it.title}\n  [✅ 发布](${pub}) · [⏭ 跳过](${skip})\n`;
+        const score = Number.isFinite(it.relevance) ? `\`${it.relevance}/10\` ` : '';
+        md += `- ${score}🕓 **抓取 ${scrapeT}**　${it.title}\n  [✅ 发布](${pub}) · [⏭ 跳过](${skip})\n`;
       }
       md += `\n`;
     }

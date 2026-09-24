@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
-import { SOURCES, TOPIC_KEYWORDS, SR_TOPIC_KEYWORDS, BLOCK_WORDS } from './sources.js';
+import { SOURCES, TOPIC_KEYWORDS, SR_TOPIC_KEYWORDS, BLOCK_WORDS, matchAnyKeyword } from './sources.js';
 import { translateNews, polishChinese, hasKey, SHORT_CONTENT_THRESHOLD } from './translate.js';
 import { fetchOgImage } from './og-image.js';
 
@@ -19,6 +19,11 @@ const STATE_FILE = path.join(__dirname, 'state.json');
 // 去重窗口（天）：窗口外的旧标题允许重新收录（避免"同题新闻发过一次就永远不抓"）
 const DEDUP_WINDOW_DAYS = 14;
 const DAY_MS = 86400000;
+
+// AI 相关度门槛（0-10）。低于此分的条目不进审核队列（写盘但标 status: expired）。
+// 打分口径见 translate.js 的 RELEVANCE_RUBRIC。想临时放宽：
+//   RELEVANCE_MIN=5 node run.js     想全部放行：RELEVANCE_MIN=0 node run.js
+const RELEVANCE_MIN = Number(process.env.RELEVANCE_MIN ?? 7);
 
 // 加载本地 .env（GitHub Actions 中由 secrets 注入；已显式设置的环境变量优先级更高）
 try {
@@ -119,9 +124,11 @@ async function mergeRemoteKeys(seen) {
 }
 
 // ---------- 关键词命中 ----------
+// 用 sources.js 的 matchAnyKeyword：前边界严格（uništena 不再命中 Niš），
+// 后边界按 SR_WHOLE_WORDS 决定是否放开。不要退回 t.includes()——那会放进
+// Lukašenko（命中 luka）、stanovnica（命中 stan）这类完全无关的内容。
 function hitKeywords(text, keywords) {
-  const t = text.toLowerCase();
-  return keywords.some((k) => t.includes(k.toLowerCase()));
+  return matchAnyKeyword(text, keywords);
 }
 
 // ---------- 自动分类（用于审核筛选）：中塞 / 生活 / 其他 ----------
@@ -288,7 +295,7 @@ async function fetchRssSource(source) {
 }
 // ---------- 生成 .md ----------
 function buildMd(entry) {
-  const { source, item, category, kind, finalTitle, body, note, topic, autoPublish, price, location, contact, summary, images } = entry;
+  const { source, item, category, kind, finalTitle, body, note, topic, autoPublish, price, location, contact, summary, images, relevance, statusOverride } = entry;
   const d = item.pubDate ?? new Date();
   const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
     d.getDate()
@@ -306,7 +313,7 @@ function buildMd(entry) {
     `kind: ${kind}`,
     `date: ${dateStr}`,
     `scrapedAt: ${new Date().toISOString()}`,
-    `status: ${autoPublish ? 'active' : 'pending'}`,
+    `status: ${autoPublish ? 'active' : statusOverride ?? 'pending'}`,
   ];
   if (autoPublish) {
     const exp = new Date(d.getTime() + 30 * 86400000);
@@ -317,6 +324,7 @@ function buildMd(entry) {
   }
   fmLines.push(`source: ${esc(source.name)}`);
   fmLines.push(`topic: ${autoPublish ? '生活' : topic ?? '其他'}`);
+  if (Number.isFinite(relevance)) fmLines.push(`relevance: ${relevance}`);
   if (price) fmLines.push(`price: ${esc(price)}`);
   if (location) fmLines.push(`location: ${esc(location)}`);
   if (contact) fmLines.push(`contact: ${esc(contact)}`);
@@ -351,6 +359,7 @@ async function processEntry(source, item) {
   let tags = null;
   let note = '';
   let price, location, contact;
+  let relevance = null; // AI 相关度 0-10（null=未评分）
 
   if (source.autoPublish) {
     // 自动发布类（如租房）：保留原文，不做 AI 改写，避免误改价格/户型等关键信息
@@ -372,6 +381,7 @@ async function processEntry(source, item) {
       finalTitle = t.title;
       summary = t.summary;
       tags = t.tags;
+      relevance = t.relevance ?? null;
       note = 'AI 翻译，仅供参考';
     } else {
       // 无翻译能力则跳过塞语内容
@@ -390,6 +400,7 @@ async function processEntry(source, item) {
       finalTitle = p.title;
       if (p.summary) summary = p.summary;
       tags = p.tags;
+      relevance = p.relevance ?? null;
       note = 'AI 整理';
     }
   }
@@ -411,6 +422,7 @@ async function processEntry(source, item) {
     location,
     contact,
     summary,
+    relevance,
     images: await resolveImages(source, item),
   };
 }
@@ -424,6 +436,7 @@ async function main() {
   const created = [];
   const skipped = [];
   const failed = [];
+  const dropped = [];
   const summary = [];
 
   for (const source of enabled) {
@@ -448,6 +461,20 @@ async function main() {
         if (!entry) {
           skipped.push(item.title);
           continue;
+        }
+
+        // 相关度门槛：AI 打分低于阈值的不进审核队列。
+        // 注意必须「写文件 + status: expired」而不是直接丢弃——去重集 loadExisting()
+        // 是扫 items 目录里的 .md 得出的，不落盘的话同一篇会在每轮抓取被重复翻译，
+        // 直到它滚出 RSS 窗口为止。expired 不参与 notify（只读 pending）、不上站点列表。
+        const rel = entry.relevance;
+        const lowRelevance = !entry.autoPublish && Number.isFinite(rel) && rel < RELEVANCE_MIN;
+        if (lowRelevance) {
+          entry.statusOverride = 'expired';
+          entry.note = [entry.note, `相关度 ${rel}/10 低于门槛 ${RELEVANCE_MIN}，自动归档`]
+            .filter(Boolean)
+            .join(' · ');
+          dropped.push({ title: entry.finalTitle, source: entry.source.name, relevance: rel });
         }
 
         // 写入文件：文件名基于内容哈希（而非序号），杜绝「不同源同序号 → 覆盖已发布文件」的碰撞
@@ -481,6 +508,8 @@ async function main() {
     created: created.length,
     skipped: skipped.length,
     failed: failed.length,
+    relevanceMin: RELEVANCE_MIN,
+    lowRelevance: dropped.length,
     hasTranslateKey: hasKey(),
     sources: summary,
   };
@@ -489,6 +518,12 @@ async function main() {
   console.log('===== 采集报告 =====');
   for (const s of summary) console.log('·', s);
   console.log(`\n新增 ${created.length} 条，跳过 ${skipped.length} 条，失败 ${failed.length} 个源`);
+  console.log(`相关度门槛 ${RELEVANCE_MIN}/10：${dropped.length} 条低于门槛已自动归档（不进审核）`);
+  if (dropped.length) {
+    console.log('\n归档样例（最多 10 条）：');
+    for (const d of dropped.slice(0, 10)) console.log(`· [${d.relevance}/10] ${d.title?.slice(0, 46)}`);
+  }
+  console.log(`\n→ 实际进入审核队列：${created.length - dropped.length} 条`);
   if (failed.length) {
     console.log('\n失败源：');
     failed.forEach((f) => console.log('·', f));

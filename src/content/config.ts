@@ -27,6 +27,9 @@ const items = defineCollection({
     summary: z.string().optional(),
     // 商业标记：置顶高亮 / 商家
     promoted: z.boolean().default(false),
+    // AI 相关度打分 0-10（对在塞华人的决策价值），低于抓取器门槛的条目不进审核队列。
+    // 历史条目无此字段，故 optional。
+    relevance: z.number().min(0).max(10).optional(),
   }),
 });
 

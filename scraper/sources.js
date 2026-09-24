@@ -193,54 +193,107 @@ export const TOPIC_KEYWORDS = [
 // 塞语源的收录过滤词（塞语源 keywords=[] 时用这张表，避免全量翻译浪费 token、堆审核积压）
 // 覆盖：中塞关系 / 中国相关 / 经济 / 基建 / 民生实用（签证居留物价医疗等）/ 旅游
 // 注意：塞尔维亚媒体双字母制——Politika/RTS 等用西里尔，B92/Danas/Nova 用拉丁，两张表都要有
+//
+// ⚠️ 2026-09-25 重构：此前是纯子串匹配（t.includes(kw)），导致大量误命中：
+//      luka（港口）→ Lukašenko（卢卡申科）/ Luka Dončić
+//      Niš（尼什市） → uništena（被摧毁）
+//      stan（公寓）  → stanovnica（女居民）/ stanici（警察局）
+//      viz（签证）   → televizija（电视）/ revizija
+//      kurs（汇率）  → konkurs（招标）
+//    现改为「前边界严格 + 允许后缀」的匹配（见 matchKeyword），并清掉了
+//    kurs/viz/most/luka/evropsk 等歧义词，换成无歧义写法（viza 家族 / Evropska unija 等）。
 export const SR_TOPIC_KEYWORDS = [
   // ===== 拉丁字母变体 =====
-  // 中塞关系与中国（塞语"中国"=Kina，"中国的"=kineski/kineska/kinesko）
-  'Kina', 'kinesk', 'Kineska', 'Kineski', 'Kineske', 'Srbija-Kina',
-  'Xi Jinping', 'Huawei', 'ZTE', 'China', 'kineska kompanija', 'kineske kompanije',
+  // 中塞关系与中国（塞语"中国"=Kina；变格 Kine/Kini/Kinu/Kinom 需逐个列，不能只留 Kin 词干——会误命中 kino/kinematograf）
+  'Kina', 'Kine', 'Kini', 'Kinu', 'Kinom', 'kinesk', 'Srbija-Kina',
+  'Xi Jinping', 'Si Đinping', 'Huawei', 'ZTE', 'China',
   // 经济与企业
-  'privreda', 'privredn', 'ekonomij', 'ekonomsk', 'investicij', 'investir', 'fabrika',
-  'kompanij', 'preduzeće', 'banka', 'banke', 'finansij', 'kurs', 'inflacija', 'plate',
-  'poresk', 'porez', 'budžet', 'budžetsk', 'trgovin', 'izvoz', 'uvoz', 'zaposlen', 'nezaposlenost',
+  'privred', 'ekonomij', 'ekonomsk', 'investicij', 'investir', 'fabrika',
+  'kompanij', 'preduzeć', 'bank', 'finansij', 'inflacij', 'plata', 'plate', 'platu', 'platama',
+  'zarad', 'poresk', 'porez', 'budžet', 'trgovin', 'izvoz', 'uvoz', 'zaposlen', 'nezaposlenost',
   // 基建与重大项目
-  'auto-put', 'autoput', 'železnic', 'brza pruga', 'pruga', 'most', 'aerodrom', 'luka',
+  'auto-put', 'autoput', 'železnic', 'brza pruga', 'pruga', 'aerodrom',
   'gradilišt', 'infrastruktura', 'energetik', 'gasovod', 'naftovod', 'zelena energija',
   'vetropark', 'solarn', 'rudnik', 'lithium', 'litijum', 'Rio Tinto',
-  // 欧盟与签证（注意：不直接用 'EU'——两字母小写会误命中 neutral/euro 等）
-  'Evropska unija', 'evropska unija', 'evropsk', 'pristupn', 'integracij', 'viz', 'šengen',
-  'Šengen', 'granic', 'putovnica', 'pasoš', 'boravak', 'radna dozvola', 'dozvola za rad',
-  // 民生与生活
-  'stan', 'stanova', 'nekretnin', 'kirija', 'cena', 'cene', 'stanarin', 'račun',
-  'zdravstvo', 'zdravstven', 'bolnic', 'lekar', 'lekari', 'apotek', 'vakcin',
+  // 能源价格与供暖（在塞过冬的刚需，媒体常单独成文，不含上面那些词根）
+  'struja', 'gorivo', 'dizel', 'benzin', 'naft', 'grejanj', 'grejanje',
+  // 欧盟与签证（不直接用 'EU'——会误命中 neutral/euro；也不再用 'evropsk' 单字根——会命中欧洲排球赛等）
+  'Evropska unija', 'evropska unija', 'pristupn', 'integracij',
+  'šengen', 'granic', 'putovnica', 'pasoš', 'boravak', 'radna dozvola', 'dozvola za rad',
+  'viza', 'vize', 'vizu', 'vizni',
+  // 民生与生活（stan 变格与 cena 变格必须逐形列出，词干太短会误命中 stanovnik/stanica/scena）
+  'stan', 'stana', 'stanu', 'stanom', 'stanovi', 'stanova', 'stanovima',
+  'nekretnin', 'kirija', 'kirij', 'stanarin', 'cena', 'cene', 'cenu',
+  'poskupljenj', 'račun',
+  'zdravstv', 'bolnic', 'lekar', 'lekari', 'apotek', 'vakcin',
   'škola', 'školstv', 'fakultet', 'obrazovanj', 'vrtić', 'prevoz', 'javni prevoz',
   'gradski prevoz', 'metro', 'taksi', 'parking', 'saobraćaj', 'bezbednost', 'vremenska prognoza',
   // 旅游与文化
-  'turizam', 'turističk', 'EXPO', 'EXPO 2027', 'manifestacij', 'festival', 'sajam',
+  'turizam', 'turističk', 'EXPO', 'manifestacij', 'festival', 'sajam',
   'hotel', 'restoran', 'muzej', 'beograd', 'Novi Sad', 'Niš', 'Kragujevac', 'Subotica',
   // ===== 西里尔字母变体（Politika/RTS 等）=====
   // 中塞关系与中国
-  'Кина', 'кинеск', 'Кинеска', 'Кинески', 'Кинеске', 'кинеска компанија',
-  'Си Ђинпинг', 'Хуавеј', 'Кина-Србија',
+  'Кина', 'Кине', 'Кини', 'Кину', 'Кином', 'кинеск', 'Кина-Србија',
+  'Си Ђинпинг', 'Хуавеј',
   // 经济与企业
-  'привреда', 'привредн', 'економиј', 'економск', 'инвестициј', 'фабрика',
-  'компаниј', 'предузеће', 'банка', 'банке', 'финансиј', 'инфлација', 'плате',
-  'пореск', 'порез', 'буџет', 'буџетск', 'трговин', 'извоз', 'увоз', 'запослен', 'незапосленост',
+  'привред', 'економиј', 'економск', 'инвестициј', 'фабрика',
+  'компаниј', 'предузећ', 'банк', 'финансиј', 'инфлациј', 'плата', 'плате', 'плату', 'платама',
+  'зарад', 'пореск', 'порез', 'буџет', 'трговин', 'извоз', 'увоз', 'запослен', 'незапосленост',
   // 基建与重大项目
-  'аутопут', 'железниц', 'брза пруга', 'пруга', 'мост', 'аеродром', 'лука',
+  'аутопут', 'железниц', 'брза пруга', 'пруга', 'аеродром',
   'градилишт', 'инфраструктура', 'енергетик', 'гасовод', 'нафтовод', 'зелена енергија',
   'ветропарк', 'соларн', 'рудник', 'литијум', 'Рио Тинто',
+  // 能源价格与供暖
+  'струја', 'гориво', 'дизел', 'бензин', 'нафт', 'грејањ', 'грејање',
   // 欧盟与签证
-  'Европска унија', 'европска унија', 'европск', 'приступн', 'интеграциј', 'виз', 'шенген',
-  'границ', 'путовница', 'пасош', 'боравак', 'радна дозвола', 'дозвола за рад',
+  'Европска унија', 'европска унија', 'приступн', 'интеграциј',
+  'шенген', 'границ', 'путовница', 'пасош', 'боравак', 'радна дозвола', 'дозвола за рад',
+  'виза', 'визе', 'визу', 'визни',
   // 民生与生活
-  'стан', 'станова', 'некретнин', 'кирија', 'цена', 'цене', 'станарин', 'рачун',
-  'здравство', 'здравствен', 'болниц', 'лекар', 'лекари', 'апотек', 'вакцин',
+  'стан', 'стана', 'стану', 'станом', 'станови', 'станова', 'становима',
+  'некретнин', 'кирија', 'кириј', 'станарин', 'цена', 'цене', 'цену',
+  'поскупљењ', 'рачун',
+  'здравств', 'болниц', 'лекар', 'лекари', 'апотек', 'вакцин',
   'школа', 'школств', 'факултет', 'образовањ', 'вртић', 'превоз', 'јавни превоз',
   'градски превоз', 'метро', 'такси', 'паркинг', 'саобраћај', 'безбедност', 'временска прогноза',
   // 旅游与文化
   'туризам', 'туристичк', 'ЕКСПО', 'манифестациј', 'фестивал', 'сајам',
   'хотел', 'ресторан', 'музеј', 'београд', 'Нови Сад', 'Ниш', 'Крагујевац', 'Суботица',
 ];
+
+// 必须「全词匹配」的关键词（小写）。这些词用「前边界 + 允许后缀」仍会误命中：
+//   stan → stanovnik/stanica；cena → scena；plata → platforma；bank → banker/bankrot
+// 其余关键词一律「前边界严格 + 允许后缀」，这样 uništena 不再命中 Niš。
+export const SR_WHOLE_WORDS = new Set([
+  // 拉丁
+  'kina', 'kine', 'kini', 'kinu', 'kinom', 'china',
+  'stan', 'stana', 'stanu', 'stanom', 'stanovi', 'stanova', 'stanovima',
+  'cena', 'cene', 'cenu', 'plata', 'plate', 'platu', 'platama',
+  'bank', 'sajam', 'sad', 'rad', 'dom', 'put', 'list', 'broj', 'sud', 'gora', 'kost',
+  // 西里尔
+  'кина', 'кине', 'кини', 'кину', 'кином',
+  'стан', 'стана', 'стану', 'станом', 'станови', 'станова', 'становима',
+  'цена', 'цене', 'цену', 'плата', 'плате', 'плату', 'платама',
+  'банк', 'сајам',
+]);
+
+// 关键词匹配：前边界必须非字母（挡住 uništena→Niš）；后边界默认放开（吃掉塞语变格后缀）。
+// SR_WHOLE_WORDS 里的词前后都要求边界。传入 text 会自行小写。
+export function matchKeyword(text, kw) {
+  const k = String(kw).toLowerCase();
+  if (!k) return false;
+  const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = SR_WHOLE_WORDS.has(k)
+    ? `(?<![\\p{L}])${esc}(?![\\p{L}])`
+    : `(?<![\\p{L}])${esc}[\\p{L}]*`;
+  return new RegExp(pattern, 'iu').test(text);
+}
+
+/** 任一关键词命中即返回 true。 */
+export function matchAnyKeyword(text, keywords) {
+  const t = String(text).toLowerCase();
+  return keywords.some((k) => matchKeyword(t, k));
+}
 
 // 需要人工审核的敏感词（命中则跳过，避免误发）
 export const BLOCK_WORDS = [
