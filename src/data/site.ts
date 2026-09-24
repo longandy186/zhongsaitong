@@ -5,6 +5,9 @@ export const SITE = {
   description: '面向塞尔维亚华人的信息服务平台：租房、二手、招聘、中塞新闻、生活指南、供求对接',
   url: 'https://zhongsaitong.com',
   email: 'longandy2026@gmail.com',
+  // 社交分享主图（og:image）：分享到微信/WhatsApp/TikTok/Telegram 时的预览大图，1200×630
+  // 详情页会优先用条目自己的图片，取不到时才回退到这张
+  ogImage: '/images/og-default.jpg',
   // Cloudflare Web Analytics beacon token（浏览互动统计：停留时长 / 滚动 / 点击）
   // 留空 = 不埋点；填上后到 CF 后台 Analytics & Logs → Web Analytics 就能看互动数据。
   // ⚠️ 该 token 本身公开（写在客户端 JS 里），不属机密。

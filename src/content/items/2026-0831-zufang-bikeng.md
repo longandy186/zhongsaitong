@@ -3,9 +3,7 @@ title: 塞尔维亚租房避坑指南：押金/合同/水电网/中介（2026 �
 summary: "在塞租房前必读：押金通常 1-2 个月租金、中介费约 1 个月、水电费每月约 80-150 欧元另付；合同必须书面、无合同驱逐通知期仅 8 天；房东是否愿开白色卡片是签约红线。含材料清单、费用参考与常见纠纷避坑。"
 category: guide
 date: 2026-08-31
-images:
-  - https://picsum.photos/seed/zufang1/800/600
-  - https://picsum.photos/seed/zufang2/800/600
+images: ["/images/covers/guide-zufang-bikeng.jpg"]
 tags: [租房, 押金, 合同, 水电费, 白色卡片, 贝尔格莱德]
 ---
 

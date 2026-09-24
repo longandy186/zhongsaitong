@@ -10,6 +10,7 @@ import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
 import { SOURCES, TOPIC_KEYWORDS, SR_TOPIC_KEYWORDS, BLOCK_WORDS } from './sources.js';
 import { translateNews, polishChinese, hasKey, SHORT_CONTENT_THRESHOLD } from './translate.js';
+import { fetchOgImage } from './og-image.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ITEMS_DIR = path.resolve(__dirname, '../src/content/items');
@@ -243,6 +244,21 @@ function extractImages(it) {
   return imgs.slice(0, 5); // 最多保留 5 张
 }
 
+// 图片三级兜底：RSS/正文抽到的图 → 详情页 og:image → 源级 fallbackImage（品牌封面）
+// 背景：RTS 的 RSS 完全不带 enclosure/media/正文 img（256 条全无图），
+//       使馆源是 HTML 抓取且页面只有 logo，同样抽不到图。
+async function resolveImages(source, item) {
+  const own = (item.images ?? []).filter(Boolean);
+  if (own.length) return own;
+  // source.ogImage === false 可关闭（如详情页 og:image 是站点 logo 的源）
+  if (source.ogImage !== false && item.link) {
+    const og = await fetchOgImage(item.link);
+    if (og) return [og];
+  }
+  if (source.fallbackImage) return [source.fallbackImage];
+  return [];
+}
+
 // ---------- RSS 抓取 ----------
 async function fetchRssSource(source) {
   const feed = await parser.parseURL(source.url);
@@ -395,7 +411,7 @@ async function processEntry(source, item) {
     location,
     contact,
     summary,
-    images: item.images ?? [],
+    images: await resolveImages(source, item),
   };
 }
 

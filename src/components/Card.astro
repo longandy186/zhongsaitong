@@ -35,7 +35,13 @@ function formatTime(d: Date): string {
 <a href={itemUrl(item)} class="card" data-kind={data.kind} data-search={searchText}>
   {cover ? (
     <div class="card-img">
-      <img src={cover} alt={data.title} loading="lazy" />
+      <img
+        src={cover}
+        alt={data.title}
+        loading="lazy"
+        referrerpolicy="no-referrer"
+        onerror="this.remove()"
+      />
       {data.images.length > 1 && (
         <span class="img-count">{data.images.length}图</span>
       )}

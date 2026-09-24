@@ -5,16 +5,24 @@ interface Props {
   description?: string;
   canonical?: string; // 覆盖默认 canonical（用于旧 /post/ 页指向新 URL）
   noindex?: boolean; // 不进搜索引擎索引（404 等），同时不输出 canonical
+  image?: string; // 社交分享主图；不传则用站点默认分享图
+  ogType?: 'website' | 'article';
 }
 const {
   title = `${SITE.name} · ${SITE.tagline}`,
   description = SITE.description,
   canonical: canonicalProp,
   noindex = false,
+  image: imageProp,
+  ogType = 'website',
 } = Astro.props;
 const canonical = canonicalProp
   ? new URL(canonicalProp, SITE.url).href
   : new URL(Astro.url.pathname, SITE.url).href;
+// 社交分享主图：og:image 必须是绝对 URL；条目的图多为外链，相对路径补成站内绝对地址
+const asAbs = (u: string) => (/^https?:\/\//i.test(u) ? u : new URL(u, SITE.url).href);
+const ogImage = asAbs(imageProp || SITE.ogImage);
+const ogImageIsDefault = !imageProp;
 // Cloudflare Web Analytics：token 为空则不输出 beacon（避免误报/重复计数）
 const cfBeaconToken = SITE.cfBeaconToken;
 ---
@@ -27,11 +35,29 @@ const cfBeaconToken = SITE.cfBeaconToken;
     <meta name="description" content={description} />
     <meta name="generator" content={Astro.generator} />
     <meta name="theme-color" content="#7B1E3B" />
-    <meta property="og:locale" content="zh_CN" />
-    <meta property="og:site_name" content="中塞通" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
     {noindex ? <meta name="robots" content="noindex, follow" /> : <link rel="canonical" href={canonical} />}
+    {
+      !noindex && (
+        <>
+          <meta property="og:type" content={ogType} />
+          <meta property="og:locale" content="zh_CN" />
+          <meta property="og:site_name" content="中塞通" />
+          <meta property="og:title" content={title} />
+          <meta property="og:description" content={description} />
+          <meta property="og:url" content={canonical} />
+          <meta property="og:image" content={ogImage} />
+          <meta property="og:image:alt" content={title} />
+          {ogImageIsDefault && <meta property="og:image:width" content="1200" />}
+          {ogImageIsDefault && <meta property="og:image:height" content="630" />}
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:title" content={title} />
+          <meta name="twitter:description" content={description} />
+          <meta name="twitter:image" content={ogImage} />
+        </>
+      )
+    }
     {
       cfBeaconToken && (
         <script

@@ -28,7 +28,12 @@ function formatDate(d: Date): string {
 }
 ---
 
-<Base title={`${data.title} · 中塞通`} description={desc}>
+<Base
+  title={`${data.title} · 中塞通`}
+  description={desc}
+  image={data.images?.[0]}
+  ogType="article"
+>
   <ArticleSchema item={item} />
   <Header active={data.category === 'news' ? 'news' : data.category} />
 
@@ -63,7 +68,13 @@ function formatDate(d: Date): string {
     {data.images.length > 0 && (
       <div class="post-gallery">
         {data.images.map((img, i) => (
-          <img src={img} alt={`${data.title} ${i + 1}`} loading="lazy" />
+          <img
+            src={img}
+            alt={`${data.title} ${i + 1}`}
+            loading={i === 0 ? 'eager' : 'lazy'}
+            referrerpolicy="no-referrer"
+            onerror="this.remove()"
+          />
         ))}
       </div>
     )}

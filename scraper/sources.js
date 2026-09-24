@@ -12,6 +12,9 @@ export const SOURCES = [
     lang: 'zh',
     keywords: [],
     selector: 'a[href*="t202"]',
+    // 使馆页面只有 logo，没有内容图、也没有 og:image（已实测），直接用品牌封面兜底
+    ogImage: false,
+    fallbackImage: '/images/covers/cover-embassy.jpg',
     enabled: true,
   },
   {
@@ -23,6 +26,8 @@ export const SOURCES = [
     lang: 'zh',
     keywords: [],
     selector: 'a[href*="t202"]',
+    ogImage: false,
+    fallbackImage: '/images/covers/cover-embassy.jpg',
     enabled: true,
   },
   {

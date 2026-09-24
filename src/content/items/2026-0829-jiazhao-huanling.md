@@ -3,9 +3,7 @@ title: 中国驾照换领塞尔维亚驾照全攻略（2026 版）
 summary: "中塞驾驶证互认协议已生效：在塞居留超一年可凭中国驾照免试换领塞驾照；临时停留不满一年可凭驾照+翻译件直接驾车。含材料清单、费用、流程与准驾车型注意事项。"
 category: guide
 date: 2026-08-29
-images:
-  - https://picsum.photos/seed/jiazhao1/800/600
-  - https://picsum.photos/seed/jiazhao2/800/600
+images: ["/images/covers/guide-jiazhao-huanling.jpg"]
 tags: [驾照, 换领, 驾驶, 中塞互认, 出行]
 ---
 

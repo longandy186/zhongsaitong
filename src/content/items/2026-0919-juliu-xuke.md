@@ -3,9 +3,7 @@ title: 塞尔维亚居留许可办理指南：白卡、材料、费用与统一�
 summary: "赴塞长期停留须办临时居留许可（privremeni boravak）：最长可批 36 个月，提交费 430 第纳尔，统一许可（居留+工作）批准费 22,770 第纳尔、单纯居留批准费 23,450 第纳尔，全程在官方门户 welcometoserbia.gov.rs 线上提交并在线缴费，批准后发放入住卡式的生物识别居留卡。办理前必须先完成 24 小时住址登记（白卡）并注册 eID 账号。"
 category: guide
 date: 2026-09-19
-images:
-  - https://picsum.photos/seed/boravak1/800/600
-  - https://picsum.photos/seed/boravak2/800/600
+images: ["/images/covers/guide-juliu-xuke.jpg"]
 tags: [居留许可, boravak, 统一许可, 白卡, MUP, 贝尔格莱德]
 ---
 

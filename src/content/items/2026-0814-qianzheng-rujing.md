@@ -3,9 +3,7 @@ title: 赴塞尔维亚签证与入境指南（2026 版）
 summary: "中国公民持普通护照可免签入境塞尔维亚， 每次停留不超过 30 天 。"
 category: guide
 date: 2026-08-14
-images:
-  - https://picsum.photos/seed/qianzheng1/800/600
-  - https://picsum.photos/seed/qianzheng2/800/600
+images: ["/images/covers/guide-qianzheng-rujing.jpg"]
 tags: [签证, 入境, 白卡, 居留]
 ---
 
