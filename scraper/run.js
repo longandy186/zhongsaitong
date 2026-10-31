@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
 import { SOURCES, TOPIC_KEYWORDS, SR_TOPIC_KEYWORDS, BLOCK_WORDS, matchAnyKeyword } from './sources.js';
-import { translateNews, polishChinese, hasKey, SHORT_CONTENT_THRESHOLD } from './translate.js';
+import { translateNews, polishChinese, hasKey } from './translate.js';
 import { fetchOgImage } from './og-image.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -159,28 +159,109 @@ function extractRental(text) {
 
 // ---------- 详情页补全文 ----------
 // RSS 摘要通常只有 1-2 句话，导致翻译/精炼后正文太短。
-// 对配置了 articleSelector 的源（塞语媒体），抓详情页正文补进 content，AI 翻译才有足够素材。
-async function fetchFullArticle(item, selector) {
-  if (!item.link || !selector) return '';
+// 对配置了 articleSelector 的源，抓详情页正文补进 content，AI 才有足够素材。
+//
+// 2026-11-01 调整：
+//   · 上限 4000 → 8000 字符（4000 只够覆盖长文前 60%，后半段信息全丢）
+//   · 选择器支持数组，逐个试到取到正文为止（B92/Nova 等站点改版频繁）
+//   · 显式移除 script/style/iframe 后再取文本 —— B92 的正文容器尾部混着
+//     googletag.cmd.push(...) 广告脚本，不清理会被当成正文送去翻译
+//   · 超时 8s → 12s（塞语大站页面 300KB+）
+const ARTICLE_TEXT_LIMIT = Number(process.env.ARTICLE_TEXT_LIMIT ?? 8000);
+
+// 塞语媒体的 UI 噪声文案（按钮 / 导航 / 评论区标签），不是正文
+const UI_NOISE_HEAD =
+  /^(Postavi kao omiljeni Google izvor|Dodaj u omiljene|Dodaj komentar|Podeli|Prati nas|Pretplati se|Pročitaj više)\s*/i;
+// ⚠️ 尾正则必须用有限长度模式，不能用 [^]* ——
+//    那会把正文里出现「Pročitaj više o:」之后的全部内容一起吃掉（贪婪到结尾）。
+//    包在 div/span 里的推荐位、标签云已由 pickText 的 <p> 提取策略甩掉，这里只需收尾。
+const UI_NOISE_TAIL =
+  /(?:\s*(?:Komentari\s*\d*|Pogledaj komentare|Pošalji komentar|Podeli:?|Prati nas|Foto:\s*\S+|Izvor:\s*\S+))+\s*$/i;
+// 文章头部元信息：RTS 等源正文以「субота, 31.10.2026, 20:06 -> 21:04 Извор: РТС Аутор: xxx」开头
+const ARTICLE_DATE_HEAD =
+  /^(?:[\p{L}]{4,10}\s*,\s*)?\d{1,2}\.\d{1,2}\.\d{4}\.?\s*[,·]?\s*\d{1,2}:\d{2}(?:\s*(?:->|→|–|-)\s*\d{1,2}:\d{2})?\s*/u;
+// 来源行「Извор: РТС」与署名「Аутор: Андрија Игић」分开处理：
+// 合成一条正则时，可选第二词会把 "Аутор:" 当成来源名的第二个词吃掉，导致署名残缺。
+const ARTICLE_SOURCE_HEAD = /^(?:Извор|Izvor)\s*:\s*\S+\s*/iu;
+// 作者名按「两个首字母大写的词」匹配，避免把正文首词误当姓名吞掉
+const ARTICLE_BYLINE_HEAD = /^(?:Аутор|Autor)\s*:\s*[\p{Lu}][\p{Ll}]*\s+[\p{Lu}][\p{Ll}]*\s*/u;
+// 「阅读更多 / 相关报道 / 推荐」引导语。命中即截断，但只在其位于文本后段时才动手，
+// 防止正文中间恰好出现同名词被误切。
+const TAIL_MARKER = /Pročitaj više o:|Pročitajte još:|Povezane vesti|Preporučujemo|Pročitajte takođe/iu;
+
+function cleanArticleText(raw) {
+  let t = String(raw)
+    .replace(/\s+/g, ' ')
+    .replace(/Foto:\s*\S+/gi, '')
+    .replace(/^(Uz video|Video|Foto|Pogledajte)\b.*?$/gm, '')
+    .replace(/googletag[\s\S]*$/i, '') // 广告脚本尾缀
+    .trim();
+  // 头部的日期/来源/署名只在开头处理，避免误伤正文里出现的同名词
+  t = t.replace(ARTICLE_DATE_HEAD, '');
+  t = t.replace(ARTICLE_SOURCE_HEAD, '');
+  t = t.replace(ARTICLE_BYLINE_HEAD, '');
+  // 尾部推荐位：仅当标记落在文本后 25% 处才截断
+  const cut = t.search(TAIL_MARKER);
+  if (cut > 0 && cut > t.length * 0.75) t = t.slice(0, cut).trim();
+  t = t.replace(UI_NOISE_HEAD, '').replace(UI_NOISE_TAIL, '').trim();
+  return t;
+}
+
+/**
+ * 从详情页取正文。
+ * 策略：容器内若有多段 <p>，只取 <p> 的文本 —— 这样能自动甩掉包在 div/span 里的
+ *      按钮文案、评论区导航、标签列表（B92/RTS 的噪声都在 p 外面）。
+ *      没有 <p> 的页面（如使馆公文，正文是纯文本 + <br>）则退回整容器文本。
+ * @returns {string} 清洗后的正文，取不到则空串
+ */
+function pickText($, selectors) {
+  for (const sel of [].concat(selectors)) {
+    const $el = $(sel).first();
+    if (!$el.length) continue;
+    // 克隆一份再删噪声节点，避免破坏后续选择器匹配
+    const $c = $el.clone();
+    $c.find('script,style,noscript,iframe,form,button,video,audio,svg').remove();
+    $c.find('figcaption,.caption,.photo-caption,.related,.share,.social,.advert,.advertisement').remove();
+
+    const $p = $c.find('p');
+    const raw = $p.length >= 2 ? $p.toArray().map((el) => $(el).text()).join(' ') : $c.text();
+    const text = cleanArticleText(raw);
+
+    // 命中选择器但正文极短（使馆放假通知只有 80 字）也照收 —— 那是原文真实长度，
+    // 不能当成"没抓到"而回退到更长但更脏的兜底容器。
+    // 首个候选选择器（源显式配置的）用低阈值，兜底的 'article' 才用高阈值。
+    const isPrimary = sel === [].concat(selectors)[0];
+    const minLen = isPrimary ? 20 : 120;
+    if (text.length >= minLen) return text;
+  }
+  return '';
+}
+
+async function fetchFullArticle(item, selectors) {
+  if (!item.link || !selectors) return '';
   try {
     const resp = await fetch(item.link, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(12000),
     });
     if (!resp.ok) return '';
     const html = await resp.text();
     const $ = cheerio.load(html);
-    // 正文：优先选择器；取不到就退回 <article> 标签
-    const $body = $(selector).first().length ? $(selector).first() : $('article').first();
-    const text = $body.text()
-      .replace(/\s+/g, ' ')          // 压缩空白
-      .replace(/Foto:\s*\S+/gi, '')  // 去掉"Foto: xxx"图注
-      .replace(/^(Uz video|Video|Foto|Pogledajte)\b.*?$/gm, '')
-      .trim();
-    return text.slice(0, 4000);      // 上限 4000 字符，与 AI 输入上限对齐
+    const cands = [].concat(selectors);
+    // 额外兜底：article 标签（部分源未单独配置选择器）
+    const text = pickText($, [...cands, 'article']);
+    return text.slice(0, ARTICLE_TEXT_LIMIT);
   } catch {
-    return '';  // 详情页失败静默，回退 RSS 摘要
+    return ''; // 详情页失败静默，回退 RSS 摘要
   }
+}
+
+// 取「更值得用」的正文：详情页正文与 RSS 摘要取长者。
+// 有些源 RSS 本身就带全文（content:encoded），此时抓回的可能反而是摘要页。
+function pickRichest(rssContent, fullText) {
+  const a = (rssContent ?? '').trim();
+  const b = (fullText ?? '').trim();
+  return b.length > a.length ? b : a;
 }
 
 // ---------- HTML 抓取（使馆公告） ----------
@@ -301,7 +382,6 @@ function buildMd(entry) {
     d.getDate()
   ).padStart(2, '0')}`;
   const tags = item.tags?.length ? item.tags : [autoPublish ? '租房' : '新闻'];
-  const srcText = item.link ? `[${source.name}](${item.link})` : source.name;
   const esc = (s) => `"${String(s).replace(/"/g, "'")}"`;
 
   // 自动发布类（如租房）：直接 active + 30 天过期，不经飞书审核
@@ -334,12 +414,21 @@ function buildMd(entry) {
   fmLines.push('---', '');
   const fm = fmLines.join('\n');
 
+  // 正文：每个段落独立成段（Markdown 用空行分段）。
+  // 注意段落之间必须留空行，否则 Astro 会把整篇渲染成一个 <p>——这正是
+  // 旧版正文"一大坨字、扫两眼就到底"的直接原因。
+  const paragraphs = (body ?? [])
+    .map((p) => String(p ?? '').replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean);
+
+  // 出处行：只列原站链接，不写"自动采集/AI 翻译"之类的机械说明。
+  const credit = item.link ? `> 原文：[${item.title}](${item.link})` : `> 来源：${source.name}`;
+
   const lines = [
     `# ${finalTitle}`,
     '',
-    ...body.map((l) => l.replace(/\s+/g, ' ').trim()),
-    '',
-    `> 本文由 ${srcText} 自动采集整理${note ? '，' + note : ''}`,
+    ...paragraphs.flatMap((p) => [p, '']),
+    credit,
   ];
   return fm + lines.join('\n');
 }
@@ -356,10 +445,20 @@ async function processEntry(source, item) {
 
   let finalTitle = item.title;
   let summary = item.content.slice(0, 400);
+  let body = [];
   let tags = null;
   let note = '';
   let price, location, contact;
   let relevance = null; // AI 相关度 0-10（null=未评分）
+
+  // 详情页补全文：只要源配置了 articleSelector 就**一律抓**，
+  // 不再以「RSS 摘要短于 300 字」为前提 —— RSS 摘要常常有 300-500 字但依然不是全文，
+  // 旧逻辑在这里漏抓了一大批。抓回来和 RSS 内容取长者（见 pickRichest）。
+  let content = item.content;
+  if (source.articleSelector) {
+    const full = await fetchFullArticle(item, source.articleSelector);
+    content = pickRichest(item.content, full);
+  }
 
   if (source.autoPublish) {
     // 自动发布类（如租房）：保留原文，不做 AI 改写，避免误改价格/户型等关键信息
@@ -368,41 +467,39 @@ async function processEntry(source, item) {
       price = ex.price;
       location = ex.location;
     }
+    body = content ? [content] : [];
   } else if (source.lang === 'sr') {
-    // 塞尔维亚语 → 中文翻译
-    // RSS 摘要太短（低于阈值）且配置了 articleSelector 时，抓详情页补全文，翻译才有素材
-    let content = item.content;
-    if (content.replace(/\s+/g, '').length < SHORT_CONTENT_THRESHOLD && source.articleSelector) {
-      const full = await fetchFullArticle(item, source.articleSelector);
-      if (full) content = full;
-    }
+    // 塞尔维亚语 → 中文编译（输出分段正文）
     const t = await translateNews(item.title, content);
     if (t) {
       finalTitle = t.title;
-      summary = t.summary;
+      if (t.summary) summary = t.summary;
+      body = t.body ?? [];
       tags = t.tags;
       relevance = t.relevance ?? null;
-      note = 'AI 翻译，仅供参考';
+      note = 'AI 翻译';
     } else {
       // 无翻译能力则跳过塞语内容
       return null;
     }
   } else if (hasKey()) {
-    // 中文源精炼
-    // 中文源同样在摘要太短时抓详情页补全文（新华/人民等正文长，精炼后更充实）
-    let content = item.content;
-    if (content.replace(/\s+/g, '').length < SHORT_CONTENT_THRESHOLD && source.articleSelector) {
-      const full = await fetchFullArticle(item, source.articleSelector);
-      if (full) content = full;
-    }
+    // 中文源整理（不翻译，只做结构化与排版）
     const p = await polishChinese(item.title, content);
     if (p?.title) {
       finalTitle = p.title;
       if (p.summary) summary = p.summary;
+      body = p.body ?? [];
       tags = p.tags;
       relevance = p.relevance ?? null;
       note = 'AI 整理';
     }
+  }
+
+  // 兜底：AI 未返回正文（无 key / 解析失败 / 模型没按要求输出），
+  // 用摘要或原文顶上，保证页面不会是空壳。
+  if (!body.length) {
+    if (summary) body = [summary];
+    else if (content) body = [content.slice(0, 1200)];
   }
 
   return {
@@ -412,11 +509,8 @@ async function processEntry(source, item) {
     kind: source.kind,
     autoPublish: !!source.autoPublish,
     finalTitle,
-    topic: classifyTopic(`${finalTitle} ${summary}`),
-    body: [
-      summary ? summary : '',
-      item.link ? `原文链接：[${item.title}](${item.link})` : '',
-    ].filter(Boolean),
+    topic: classifyTopic(`${finalTitle} ${summary} ${body.join(' ')}`),
+    body,
     note,
     price,
     location,

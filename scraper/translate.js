@@ -35,8 +35,13 @@ try {
 }
 
 // 翻译/精炼时的正文输入长度上限（字符）。RSS 摘要 + 详情页正文合并后截断。
-export const AI_CONTENT_LIMIT = 4000;
-// 判定"内容太短、需要去抓详情页"的阈值（字符，去空白后）
+// 2026-11-01 由 4000 提到 9000：4000 只够覆盖长文的前 60%，后半段信息直接丢失。
+export const AI_CONTENT_LIMIT = Number(process.env.AI_CONTENT_LIMIT ?? 9000);
+// 单次调用输出上限。600-900 字正文约 1400 token，4096 有余量且不至于让模型注水。
+const AI_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS ?? 4096);
+// 判定"内容太短、需要去抓详情页"的阈值（字符，去空白后）。
+// 2026-11-01 起塞语源/配置了 articleSelector 的源一律抓详情页，此阈值仅用于判断
+// 抓回来的正文是否比 RSS 摘要更值得用（见 run.js pickRichest）。
 export const SHORT_CONTENT_THRESHOLD = 300;
 
 export function hasKey() {
@@ -93,9 +98,11 @@ async function callAI(system, user) {
                 { role: 'user', content: user },
               ],
               temperature: 0.3,
-              max_tokens: 2048,
+              max_tokens: AI_MAX_TOKENS,
             }),
-            signal: AbortSignal.timeout(30000), // 30s 超时，防止 API 挂起卡死整个采集
+            // 60s 超时：输出 600-900 字正文比原来的短摘要慢 2-3 倍，
+            // 限流降级到 glm-4-flash 时更慢；仍保留上限防止 API 挂起卡死整个采集。
+            signal: AbortSignal.timeout(60000),
           });
           if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
@@ -254,6 +261,135 @@ export async function scoreRelevance(title, summary = '') {
 }
 
 /**
+ * 合并过短的段落。
+ *
+ * 背景：塞语新闻（尤其政府/机构公告）原文多为单句成段，模型倾向逐段搬运，
+ * 产出「12 段、每段一句话、连续多段同一主语开头」的条列体，读起来像通告不像文章。
+ * 提示词已要求它合并，但这类格式约束模型遵守率不稳定，这里加一层确定性兜底：
+ * 短于 minLen 的段落一律并入前一段（首段则并入次段）。
+ *
+ * 只做合并、不重写文字，不会改变事实口径。
+ * @param {string[]} paras
+ * @param {number} minLen 视为"过短"的字数阈值
+ * @returns {string[]}
+ */
+export function mergeShortParagraphs(paras, { maxParas = 6, minLen = 40, maxLen = 300 } = {}) {
+  const arr = (paras ?? []).map((s) => String(s).trim()).filter(Boolean);
+  if (arr.length <= 1) {
+    // 模型偶尔无视"数组"要求，把整篇正文塞进一个字符串（实测 RTS 有一条 500 字一段）。
+    // 此时按句末标点补切，目标 3-6 段。
+    if (arr.length === 1 && arr[0].length > maxLen) {
+      const s = arr[0];
+      const sentences = s.match(/[^。！？；]*[。！？；]|[^。！？；]+$/g) ?? [s];
+      const target = Math.min(6, Math.max(3, Math.round(s.length / 180)));
+      const per = Math.ceil(sentences.length / target);
+      const chunks = [];
+      for (let i = 0; i < sentences.length; i += per) {
+        chunks.push(sentences.slice(i, i + per).join('').trim());
+      }
+      return chunks.filter(Boolean);
+    }
+    return arr;
+  }
+
+  // 第一步：只处理"极端短段"（短于 minLen 字），并入前一段。
+  // ⚠️ 阈值不能定高 —— 试过 60 字，会把正常的三段文压成两段、七段通告塌成一坨。
+  const out = [];
+  for (const p of arr) {
+    if (out.length && p.length < minLen) out[out.length - 1] += p;
+    else out.push(p);
+  }
+  if (out.length >= 2 && out[0].length < minLen) {
+    out[1] = out[0] + out[1];
+    out.shift();
+  }
+
+  // 第二步：段数仍超上限时，反复合并"当前最短的相邻两段"。
+  // 这样优先消化碎片，长段落尽量保持完整。
+  while (out.length > maxParas) {
+    let idx = 0;
+    let min = Infinity;
+    for (let i = 0; i < out.length - 1; i++) {
+      const len = out[i].length + out[i + 1].length;
+      if (len < min) {
+        min = len;
+        idx = i;
+      }
+    }
+    out.splice(idx, 2, out[idx] + out[idx + 1]);
+  }
+  return out;
+}
+
+// ---------- 正文段落输出规格（2026-11-01 新增）----------
+// 背景：此前只让模型输出 150-250 字摘要，抓到 2000+ 字原文也只用得上十分之一，
+//       线上正文中位数仅 106 字，读者反馈"没看到什么具体的就没了"。
+// 现改为「信息完整压缩版」：保留全部关键事实与数字，去掉铺垫与评论，
+//       篇幅控制在 600-900 字（约原文的三到四成），比逐字机翻可读、比摘要完整。
+const BODY_RULES = (targetLen) =>
+  '\n【正文 body 写法 —— 严格遵守】\n' +
+  `  · 输出字符串数组，每个元素是一个自然段，合计 ${targetLen} 字。\n` +
+  '  · 第一段先说最重要的结果或结论，不要从背景写起。\n' +
+  '  · 必须原样保留原文里的：具体数字、金额与货币、日期与时间节点、地名、人名及其职务、\n' +
+  '    机构与企业名称、政策条款与适用条件、期限与生效范围。\n' +
+  '  · 必须删掉：媒体评论与社论口吻、背景知识铺垫、重复表述、记者署名、\n' +
+  '    社交平台留言引述、与事件无关的关联报道推荐。\n' +
+  '  · 每段 2-4 句。按事件逻辑分段（原因/经过/影响/后续），不要机械对应原文段落。\n' +
+  '  · **每个自然段至少 2 句，禁止单句成段**（原文全篇只有一两句时除外）。\n' +
+  '  · **禁止连续多段用同一个主语开头**。例如连续五段都以「某机构表示」起首，\n' +
+  '    这是把官网公告逐条搬过来的典型症状，必须合并成一段再叙述。\n' +
+  '  · 段数宁少勿多：500 字以内用 3-4 段，700 字以上才用 5-6 段。\n' +
+  '  · 原文若是滚动直播帖（多条带时间戳的快讯拼接），按主题合并成 3-6 段，\n' +
+  '    不要把每条快讯各写成一段——那样读起来是一堆互不相关的碎片。\n' +
+  '  · 地名与人名一律用中文通用译名（贝尔格莱德、诺维萨德、武契奇、赫尔松），\n' +
+  '    不要保留拉丁或西里尔原文，也不要半中半英（如「赫erson」）。\n' +
+  '  · 禁止出现小标题、项目符号（-、·、1.）、加粗（**）、任何 Markdown 标记。\n' +
+  '  · 禁止使用"据悉""值得一提的是""值得注意的是""总而言之""引发广泛关注""\n' +
+  '    在当前形势下""业内人士指出"这类空话套话。\n' +
+  '  · 只写原文确实写到的内容。不要补充你自己的背景知识，不要推测原文没说的结论，\n' +
+  '    不要为了凑字数注水。原文信息少就写短，宁短勿编。\n';
+
+/**
+ * 按原文长度给正文目标字数。
+ * 固定写「600-900 字」实测两头都不对：短讯被硬凑成注水文，长文反而缩到 300 字。
+ */
+function targetBodyLength(sourceLen) {
+  if (sourceLen > 5000) return '700-900';
+  if (sourceLen > 2000) return '500-700';
+  if (sourceLen > 800) return '350-550';
+  return '200-350';
+}
+
+/**
+ * 规范化模型返回的正文。
+ * 容忍三种形态：① 字符串数组（期望）② 含 \n\n 的整段字符串 ③ 带 Markdown 记号的文本。
+ * @returns {string[]} 非空段落数组
+ */
+export function normalizeBody(raw) {
+  if (!raw) return [];
+  let paras = [];
+  if (Array.isArray(raw)) {
+    paras = raw.map((s) => String(s ?? ''));
+  } else {
+    paras = String(raw).split(/\n{2,}|\r\n{2,}/);
+  }
+  return paras
+    .map((s) =>
+      s
+        .replace(/\r/g, '')
+        .replace(/^\s{0,3}#{1,6}\s+/gm, '') // 小标题
+        .replace(/^\s{0,3}[-*·•]\s+/gm, '') // 项目符号
+        .replace(/^\s{0,3}\d+[.、)]\s+/gm, '') // 有序列表
+        .replace(/\*\*(.+?)\*\*/g, '$1') // 加粗
+        .replace(/`{1,3}([^`]+)`{1,3}/g, '$1')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // 链接只留文字
+        .replace(/\s+/g, ' ')
+        .trim()
+    )
+    .filter((s) => s.length > 0 && s !== '—' && s !== '-');
+}
+
+/**
  * 兜底解析：模型偶尔无视 JSON 要求，只回一个裸类别词（如 "policy"）。
  * 实测这是解析失败的主因 —— 模型答对了，是解析器把答案扔了。
  */
@@ -265,30 +401,52 @@ function parseBareCategory(text) {
 }
 
 export async function translateNews(title, content) {
+  const src = content.slice(0, AI_CONTENT_LIMIT);
   const text = await callAI(
-    '你是中塞双语新闻编辑。将塞尔维亚语/英语新闻翻译成简体中文，并提取关键信息。' +
-      '必须严格输出 JSON，格式：{"title":"中文标题","summary":"150-250字中文摘要（保留关键事实、数据、时间、地点，宁详勿略）","tags":["标签1","标签2"],"type":"类别词","d":布尔}。不要输出其他内容。\n' +
+    '你是中塞双语新闻编辑。把塞尔维亚语/英语新闻编译成简体中文，供在塞尔维亚的华人阅读。' +
+      '必须严格输出 JSON，格式：{"title":"中文标题","summary":"导语","body":["段落1","段落2"],"tags":["标签1","标签2"],"type":"类别词","d":布尔}。' +
+      '不要输出 JSON 以外的任何内容。\n' +
+      '【title】不超过 30 字，说清发生了什么，不用问句、不用感叹号。\n' +
+      '【summary】60-100 字的一句话导语，只概括最核心的事实，不重复标题。\n' +
+      '【tags】2-4 个中文标签，每个 2-5 字，写主体对象与主题（如「贝尔格莱德」「电价」「签证」）。\n' +
+      BODY_RULES(targetBodyLength(src.length)) +
       RELEVANCE_RUBRIC,
-    `原标题：${title}\n原文：${content.slice(0, AI_CONTENT_LIMIT)}`
+    `原标题：${title}\n原文：${src}`
   );
   const j = parseJson(text);
   if (!j) return j;
+  j.body = mergeShortParagraphs(normalizeBody(j.body));
   j.relevance = deriveScore(j);
   return j;
 }
 
 /**
- * 中文新闻精炼（生成更吸引人的标题 + 摘要）
+ * 中文新闻整理（中文源不需要翻译，只做结构化与排版）
  */
 export async function polishChinese(title, content) {
   const text = await callAI(
-    '你是中文新闻编辑。将给定新闻改写为更简洁、适合华人读者阅读的版本，保留关键事实、数据、时间、地点。' +
-      '必须严格输出 JSON，格式：{"title":"优化后的标题","summary":"150-250字中文摘要（宁详勿略）","tags":["标签1","标签2"],"type":"类别词","d":布尔}。不要输出其他内容。\n' +
+    '你是中文新闻编辑。把给定的中文原文整理成适合华人读者阅读的版本。' +
+      '注意：这是中文源，你的任务是**整理**不是改写——不扩写、不补充原文没有的信息、不改变事实口径。' +
+      '必须严格输出 JSON，格式：{"title":"标题","summary":"导语","body":["段落1","段落2"],"tags":["标签1","标签2"],"type":"类别词","d":布尔}。' +
+      '不要输出 JSON 以外的任何内容。\n' +
+      '【title】沿用原标题的表述，只在超过 30 字时精简，不要另起新标题。\n' +
+      '【summary】60-100 字导语。\n' +
+      '【body】把原文按自然段拆成数组，保留原文的全部句子和信息，只做以下处理：\n' +
+      '  · 删掉网页残留（"来源：xxx""编辑：xxx""扫一扫关注"、分享按钮文字、责任编辑署名）；\n' +
+      '  · 按语义切成 2-6 段，每段 2-4 句，段与段之间逻辑递进；\n' +
+      '  · 原文的换行不等于段落边界：同一句话被换行拆开的必须合并成一句，\n' +
+      '    不要出现"因端午假期，"单独成段这种断句；\n' +
+      '  · 发文单位署名与日期并入最后一段（原文只有署名没有正文时则整段删掉），\n' +
+      '    不要各占一段；\n' +
+      '  · 去掉小标题、项目符号、加粗等 Markdown 标记；\n' +
+      '  · 原文只有一两句话就保持一两句话，绝不注水扩写。\n' +
+      '【tags】2-4 个中文标签。\n' +
       RELEVANCE_RUBRIC,
-    `原标题：${title}\n正文：${content.slice(0, AI_CONTENT_LIMIT)}`
+    `原标题：${title}\n原文：${content.slice(0, AI_CONTENT_LIMIT)}`
   );
   const j = parseJson(text);
   if (!j) return j;
+  j.body = mergeShortParagraphs(normalizeBody(j.body));
   j.relevance = deriveScore(j);
   return j;
 }

@@ -12,6 +12,9 @@ export const SOURCES = [
     lang: 'zh',
     keywords: [],
     selector: 'a[href*="t202"]',
+    // 详情页正文容器（2026-11-01 实测）。使馆页面正文在 #News_Body_Txt_A，
+    // 外层 div#article.News_Body_Text 含标题/日期/分享按钮，不要用。
+    articleSelector: '#News_Body_Txt_A',
     // 使馆页面只有 logo，没有内容图、也没有 og:image（已实测），直接用品牌封面兜底
     ogImage: false,
     fallbackImage: '/images/covers/cover-embassy.jpg',
@@ -26,6 +29,7 @@ export const SOURCES = [
     lang: 'zh',
     keywords: [],
     selector: 'a[href*="t202"]',
+    articleSelector: '#News_Body_Txt_A',
     ogImage: false,
     fallbackImage: '/images/covers/cover-embassy.jpg',
     enabled: true,
@@ -121,6 +125,9 @@ export const SOURCES = [
     kind: 'news',
     lang: 'sr',
     keywords: [], // 空=用 SR_TOPIC_KEYWORDS 过滤
+    // 2026-11-01 实测：正文在 div.single-news-content（7000+ 字符）。
+    // 注意容器尾部混着 googletag 广告脚本，run.js 的 pickText 会先删 script 再取文本。
+    articleSelector: 'div.single-news-content',
     maxItems: 25,
     enabled: true,
   },
@@ -145,6 +152,8 @@ export const SOURCES = [
     kind: 'news',
     lang: 'sr',
     keywords: [], // 空=用 SR_TOPIC_KEYWORDS 过滤
+    // 2026-11-01 实测：正文在 div.story-wrapper（3200-3900 字符）
+    articleSelector: 'div.story-wrapper',
     maxItems: 20,
     enabled: true,
   },
