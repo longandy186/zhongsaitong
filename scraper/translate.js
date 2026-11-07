@@ -341,8 +341,6 @@ const BODY_RULES = (targetLen) =>
   '  · 段数宁少勿多：500 字以内用 3-4 段，700 字以上才用 5-6 段。\n' +
   '  · 原文若是滚动直播帖（多条带时间戳的快讯拼接），按主题合并成 3-6 段，\n' +
   '    不要把每条快讯各写成一段——那样读起来是一堆互不相关的碎片。\n' +
-  '  · 地名与人名一律用中文通用译名（贝尔格莱德、诺维萨德、武契奇、赫尔松），\n' +
-  '    不要保留拉丁或西里尔原文，也不要半中半英（如「赫erson」）。\n' +
   '  · 禁止出现小标题、项目符号（-、·、1.）、加粗（**）、任何 Markdown 标记。\n' +
   '  · 禁止使用"据悉""值得一提的是""值得注意的是""总而言之""引发广泛关注""\n' +
   '    在当前形势下""业内人士指出"这类空话套话。\n' +
@@ -389,6 +387,148 @@ export function normalizeBody(raw) {
     .filter((s) => s.length > 0 && s !== '—' && s !== '-');
 }
 
+// ---------- 专有名词保真（2026-11-07）----------
+// 背景：模型对「名称保留原文」这条规则的遵守率极不稳定。同样的 prompt 连测三条，
+//   结果分别是：①保留西里尔 ②音译成「瓦列沃」 ③把 Влада Јеринић 拆成「武契奇·耶里尼ћ」。
+//   四轮提示词迭代（详细规则 → 白名单 → 正反示例 → 精简铁律）都没有改善，
+//   小模型就是执行不了这种细粒度语义约束。
+//
+// 做法：把「识别哪些是专有名词」交给模型（这是语义判断，小模型能做好），
+//   把「替换与还原」交给代码（确定性操作）。模型全程接触不到原名，也就无法音译。
+//
+// 流程：原文 ──AI提取──▶ 名称列表 ──代码占位──▶ [[N1]] 版原文 ──AI翻译──▶ 译文
+//        ──代码还原──▶ 拉丁转写后的原名
+
+// 塞尔维亚语西里尔 → 拉丁（官方 Gajica 对应，一一映射，无歧义）。
+// 用代码转写而不是让模型转，因为这是纯查表工作，模型反而会出错（实测把
+// Покрет 转成 Pomak、Bogoljub 转成 Bogođub）。
+const CYR2LAT = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', ђ: 'đ', е: 'e', ж: 'ž', з: 'z', и: 'i',
+  ј: 'j', к: 'k', л: 'l', љ: 'lj', м: 'm', н: 'n', њ: 'nj', о: 'o', п: 'p', р: 'r',
+  с: 's', т: 't', ћ: 'ć', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'č', џ: 'dž', ш: 'š',
+};
+
+/** 西里尔转拉丁，保留原有大小写（Љ→Lj 而不是 LJ）。 */
+export function cyrillicToLatin(s) {
+  return String(s).replace(/[\u0400-\u04FF]/g, (ch) => {
+    const lower = ch.toLowerCase();
+    const mapped = CYR2LAT[lower];
+    if (!mapped) return ch;
+    if (ch !== lower) return mapped.charAt(0).toUpperCase() + mapped.slice(1);
+    return mapped;
+  });
+}
+
+
+// 机构类后缀：这些词小写时仍可能是专名的一部分（如 "Alta banka"、"Nova televizija"）
+const ORG_WORDS = [
+  'banka', 'банка', 'televizija', 'телевизија', 'univerzitet', 'универзитет',
+  'bolnica', 'болница', 'škola', 'школа', 'opština', 'општина',
+  'ministarstvo', 'министарство', 'agencija', 'агенција',
+  'kompanija', 'компанија', 'klub', 'клуб', 'fond', 'фонд',
+  'institut', 'институт', 'aerodrom', 'аеродром', 'hotel', 'хотел',
+  'sud', 'суд', 'zavod', 'завод',
+];
+const ORG_SUFFIX = new RegExp(`^(${ORG_WORDS.join('|')})$`, 'iu');
+const ORG_SUFFIX_ANY = new RegExp(`\\b(${ORG_WORDS.join('|')})\\b`, 'iu');
+
+/**
+ * 判断抽取结果是否真的是专名。
+ *
+ * 模型会把「形容词 + 普通名词」当成名称抽出来（实测：Италијанска премијерка
+ * = 意大利总理、дарк вебу = 暗网、Холандска војна полиција = 荷兰军警）。
+ * 这些一旦被占位保护，译文里就会出现「Italijanska premijerka 表示…」这种鬼话。
+ *
+ * 判定规则（宁严勿宽，漏掉的顶多被音译，误留的会毁掉整句）：
+ *   · 单词：首字母必须大写
+ *   · 多词：每个词都必须大写开头；或最后一词是机构后缀且前面都是大写（Alta banka）
+ */
+function looksLikeProperName(name) {
+  const words = String(name).trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return false;
+  const isCap = (w) => /^\p{Lu}/u.test(w);
+  if (words.length === 1) return isCap(words[0]);
+  if (words.every(isCap)) return true;
+  // 机构名中间常夹小写词（Narodna banka Srbije），只要含机构后缀且首词大写就认
+  if (ORG_SUFFIX_ANY.test(String(name)) && isCap(words[0])) return true;
+  return ORG_SUFFIX.test(words[words.length - 1]) && words.slice(0, -1).every(isCap);
+}
+
+// 国家与大城市：提示词已要求不要抽，但模型偶尔仍会抽出变格形式（Украјини）。
+// 这里按拉丁转写后的词根做兜底剔除，避免译文里冒出 "Ukrajini"。
+const NAME_BLOCK_STEMS = [
+  'ukrajin', 'srbij', 'beograd', 'novi sad', 'kosov', 'crna gora', 'hrvatsk',
+  'rusij', 'evropsk', 'nato', 'rim', 'brisel', 'kin', 'amerik', 'nemačk',
+  'italij', 'francusk', 'mađarsk', 'rumun', 'bugarsk', 'grčk', 'tursk',
+];
+
+function isBlockedCommon(name) {
+  const lat = cyrillicToLatin(name).toLowerCase();
+  return NAME_BLOCK_STEMS.some((stem) => lat.startsWith(stem));
+}
+
+/**
+ * 把原文里的西里尔专名就地转成拉丁（Ваљево→Valjevo）。
+ * 模型看到拉丁专名时保留率明显高于看到占位符——实测占位符方案会整段被删掉，
+ * 因为模型的任务是"编译成流畅中文"，遇到读不懂的标记就跳过。
+ * @param {string} text
+ * @param {string[]} names
+ */
+export function latinizeNames(text, names) {
+  let out = String(text);
+  const sorted = [...new Set(names)].sort((a, b) => b.length - a.length);
+  for (const name of sorted) {
+    const lat = cyrillicToLatin(name);
+    if (lat === name) continue; // 本来就是拉丁，不动
+    if (out.includes(name)) out = out.split(name).join(lat);
+  }
+  return out;
+}
+
+/**
+ * 第一阶段：让模型列出原文里必须保留原样的专有名词。
+ * 失败（无 key / 限流 / 解析不出来）时返回空数组，调用方退化为纯翻译，不阻塞流程。
+ * @returns {Promise<string[]>} 原文写法（西里尔或拉丁）的名称列表
+ */
+export async function extractNames(text) {
+  const t = await callAI(
+    '你是塞尔维亚语新闻的术语抽取器。任务单一：从原文中列出所有必须保留原文写法的专有名词。' +
+      '严格输出 JSON 字符串数组，如 ["Ваљево","Влада Јеринић"]。不要输出数组以外的任何内容。\n' +
+      '【只抽「塞尔维亚本地」的名称】—— 读者要拿这些名字去对照路牌、招牌、账单和官方文件：\n' +
+      '  · 塞尔维亚的城镇、乡村、街道、小区、区名（贝尔格莱德等大城市除外）\n' +
+      '  · 塞尔维亚本地的企业、银行、学校、医院、法院、机构、媒体、俱乐部、球队、赛事、产品\n' +
+      '  · 塞尔维亚人名\n' +
+      '【绝对不抽】\n' +
+      '  · 国家名：塞尔维亚、中国、俄罗斯、美国、乌克兰、意大利、荷兰等一切国家\n' +
+      '  · 国际城市：贝尔格莱德、诺维萨德、尼什、阿姆斯特丹、布鲁塞尔、罗马、柏林、\n' +
+      '    巴黎、伦敦、莫斯科、华盛顿等外国主要城市（这些有通行中文译名）\n' +
+      '  · 外国知名人物：武契奇、习近平、普京、梅洛尼、塔亚尼等有通行中文译名的\n' +
+      '  · 国际组织：欧盟、北约、联合国、世卫组织\n' +
+      '  · 职务（总统、部长、市长）、普通名词、日期、数字、金额、单纯的形容词\n' +
+      '【规则】\n' +
+      '  · 用原文写法，西里尔就写西里尔，不要翻译或转写。\n' +
+      '  · 只取名称本身，去掉前面的介词、冠词和后面的标点。\n' +
+      '  · 按出现顺序，去重，最多 30 个。',
+    String(text).slice(0, 6000)
+  );
+  if (!t) return [];
+  const m = String(t).match(/\[[\s\S]*?\]/);
+  if (!m) return [];
+  try {
+    const arr = JSON.parse(m[0]);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((x) => typeof x === 'string')
+      .map((x) => x.trim())
+      .filter((x) => x.length >= 2 && /[\p{L}]/u.test(x))
+      .filter(looksLikeProperName)
+      .filter((x) => !isBlockedCommon(x))
+      .slice(0, 40);
+  } catch {
+    return [];
+  }
+}
+
 /**
  * 兜底解析：模型偶尔无视 JSON 要求，只回一个裸类别词（如 "policy"）。
  * 实测这是解析失败的主因 —— 模型答对了，是解析器把答案扔了。
@@ -402,16 +542,44 @@ function parseBareCategory(text) {
 
 export async function translateNews(title, content) {
   const src = content.slice(0, AI_CONTENT_LIMIT);
+
+  // 阶段一：抽取专有名词。抽取失败不影响主流程，退化为纯翻译。
+  let names = [];
+  try {
+    names = await extractNames(`${title}\n${src}`);
+  } catch {
+    names = [];
+  }
+  // 转成拉丁（西里尔名由代码查表转写，确定无误），模型只需照抄这些拉丁词
+  const latinNames = [...new Set(names.map((n) => cyrillicToLatin(n)))].filter((n) =>
+    /^[\p{Lu}]/u.test(n)
+  );
+  const mTitle = latinizeNames(title, names);
+  const mSrc = latinizeNames(src, names);
+
+  const nameRule = latinNames.length
+    ? '【译文里必须原样出现的名称 —— 最高优先级】\n' +
+      `  ${latinNames.join('、')}\n` +
+      '  · 上面每个名称都必须在译文中原样出现，一个都不能少、不能删、不能改拼写。\n' +
+      '  · 绝对不许把它们换成中文音译（Valjevo 不能写成「瓦列沃」），也不许换成\n' +
+      '    「某地」「该市」「这家银行」这类笼统说法糊弄过去。\n' +
+      '  · 可以按中文语序调整位置，但名字本身必须逐字保留。\n'
+    : '';
+
   const text = await callAI(
     '你是中塞双语新闻编辑。把塞尔维亚语/英语新闻编译成简体中文，供在塞尔维亚的华人阅读。' +
       '必须严格输出 JSON，格式：{"title":"中文标题","summary":"导语","body":["段落1","段落2"],"tags":["标签1","标签2"],"type":"类别词","d":布尔}。' +
       '不要输出 JSON 以外的任何内容。\n' +
+      nameRule +
+      '【其他名称】不在上面清单里的，用通行中文译名 —— 国家、国际城市、外国名人、\n' +
+      '  国际组织都属于这一类（阿姆斯特丹、布鲁塞尔、罗马、梅洛尼都用中文）。\n' +
+      '  但如果遇到塞尔维亚本地的小地名、小机构而清单里漏了，请保留原文，不要音译。\n' +
       '【title】不超过 30 字，说清发生了什么，不用问句、不用感叹号。\n' +
       '【summary】60-100 字的一句话导语，只概括最核心的事实，不重复标题。\n' +
       '【tags】2-4 个中文标签，每个 2-5 字，写主体对象与主题（如「贝尔格莱德」「电价」「签证」）。\n' +
       BODY_RULES(targetBodyLength(src.length)) +
       RELEVANCE_RUBRIC,
-    `原标题：${title}\n原文：${src}`
+    `原标题：${mTitle}\n原文：${mSrc}`
   );
   const j = parseJson(text);
   if (!j) return j;
