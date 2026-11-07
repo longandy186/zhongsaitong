@@ -3,7 +3,7 @@ import { SITE } from '../data/site';
 interface Props {
   title?: string;
   description?: string;
-  canonical?: string; // 覆盖默认 canonical（用于旧 /post/ 页指向新 URL）
+  canonical?: string; // 覆盖默认 canonical（非详情页或特殊页面指定规范地址）
   noindex?: boolean; // 不进搜索引擎索引（404 等），同时不输出 canonical
   image?: string; // 社交分享主图；不传则用站点默认分享图
   ogType?: 'website' | 'article';
