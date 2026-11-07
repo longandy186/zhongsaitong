@@ -23,6 +23,9 @@ const items = defineCollection({
     images: z.array(z.string()).default([]),
     tags: z.array(z.string()).default([]),
     source: z.string().optional(),
+    // 原文地址。详情页页脚的「来源：XX」用它做跳转链接，
+    // 这样正文里不用再重复一遍「原文链接：…」（2026-11-07 起）。
+    sourceUrl: z.string().optional(),
     // GEO：可直接引用的摘要（2-3 句结论，用于 meta description + JSON-LD + 详情页摘要段）
     summary: z.string().optional(),
     // 商业标记：置顶高亮 / 商家

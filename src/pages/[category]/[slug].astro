@@ -23,6 +23,10 @@ const style = TYPE_STYLE[data.category];
 const categoryLabel = CATEGORY_LABEL[data.category];
 const kindLabel = NEWS_KINDS.find((k) => k.key === data.kind)?.label;
 
+// 「信息仅供参考，交易请自行核实风险」只对交易类内容有意义；
+// 新闻/指南是转述公开信息，挂这条既是噪音、又和来源说明重复。
+const isTradeCategory = ['rentals', 'secondhand', 'supply', 'jobs'].includes(data.category);
+
 function formatDate(d: Date): string {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
 }
@@ -89,9 +93,14 @@ function formatDate(d: Date): string {
           联系方式：<span class="contact-val">{data.contact}</span>
         </div>
       )}
-      <div class="post-source">
-        {data.source ? `来源：${data.source} · ` : ''}信息仅供参考，交易请自行核实风险
-      </div>
+      {(data.source || data.sourceUrl) && (
+        <div class="post-source">
+          来源：{data.sourceUrl
+            ? <a href={data.sourceUrl} target="_blank" rel="noopener nofollow">{data.source ?? '原文'}</a>
+            : data.source}
+          {isTradeCategory && <span class="post-disclaimer"> · 信息仅供参考，交易请自行核实风险</span>}
+        </div>
+      )}
     </div>
   </article>
 
@@ -149,6 +158,9 @@ function formatDate(d: Date): string {
   .post-contact { font-size: 14px; color: var(--ink-2); }
   .contact-val { color: var(--t-blue); font-weight: 600; }
   .post-source { font-size: 12px; color: var(--ink-4); }
+  .post-source a { color: var(--ink-3); text-decoration: underline; text-underline-offset: 2px; }
+  .post-source a:hover { color: var(--wine); }
+  .post-disclaimer { color: var(--ink-4); }
 
   .qr-card { margin: 14px 16px 0; background: var(--wine-dark); border-radius: var(--r-lg); padding: 14px; display: flex; align-items: center; gap: 12px; color: #fff; }
   @media (min-width: 1024px) { .qr-card { margin: 14px 0 0; padding: 16px 18px; } }

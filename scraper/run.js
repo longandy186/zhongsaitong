@@ -403,6 +403,9 @@ function buildMd(entry) {
     fmLines.push(`expireAt: ${expStr}`);
   }
   fmLines.push(`source: ${esc(source.name)}`);
+  // 原文地址写进 frontmatter，由详情页页脚的「来源：XX」做跳转链接。
+  // 正文里不再重复「原文链接：…」那一行（2026-11-07 起）。
+  if (item.link) fmLines.push(`sourceUrl: ${esc(item.link)}`);
   fmLines.push(`topic: ${autoPublish ? '生活' : topic ?? '其他'}`);
   if (Number.isFinite(relevance)) fmLines.push(`relevance: ${relevance}`);
   if (price) fmLines.push(`price: ${esc(price)}`);
@@ -421,16 +424,14 @@ function buildMd(entry) {
     .map((p) => String(p ?? '').replace(/[ \t]+/g, ' ').trim())
     .filter(Boolean);
 
-  // 出处行：只列原站链接，不写"自动采集/AI 翻译"之类的机械说明。
-  const credit = item.link ? `> 原文：[${item.title}](${item.link})` : `> 来源：${source.name}`;
-
+  // 出处行不再写进正文：来源与原文地址由详情页页脚统一渲染
+  // （见 src/pages/post/[slug].astro），避免同一页出现两遍来源说明。
   const lines = [
     `# ${finalTitle}`,
     '',
     ...paragraphs.flatMap((p) => [p, '']),
-    credit,
   ];
-  return fm + lines.join('\n');
+  return (fm + lines.join('\n')).trimEnd() + '\n';
 }
 
 // 功能性页面标题（使馆站内导航类，跳过）
