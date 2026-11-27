@@ -1,11 +1,12 @@
 ---
 import { getCollection } from 'astro:content';
+import { isVisible } from '../lib/visible';
 import { itemUrl } from '../lib/itemUrl';
 import { cleanSummary } from '../lib/summary';
 
 const all = await getCollection('items');
 const guides = all
-  .filter((i) => i.data.status === 'active' && i.data.category === 'guide')
+  .filter((i) => isVisible(i) && i.data.category === 'guide')
   .sort(
     (a, b) =>
       Number(b.data.featured) - Number(a.data.featured) ||

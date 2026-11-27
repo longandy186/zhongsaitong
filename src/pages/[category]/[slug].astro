@@ -6,10 +6,13 @@ import { TYPE_STYLE, CATEGORY_LABEL, NEWS_KINDS, SOCIAL } from '../../data/site'
 import { itemSlug } from '../../lib/itemUrl';
 import { cleanSummary } from '../../lib/summary';
 import ArticleSchema from '../../components/ArticleSchema.astro';
+import { isVisible } from '../../lib/visible';
 
 export async function getStaticPaths() {
   const items = await getCollection('items');
-  return items.map((item) => ({
+  // 只给「已发布且未过期」的条目生成页面：草稿已取消（抓取即 active），
+  // 过期的条目不再占 URL，也不会进 sitemap。
+  return items.filter((item) => isVisible(item)).map((item) => ({
     params: { category: item.data.category, slug: itemSlug(item.id) },
     props: { item },
   }));

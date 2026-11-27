@@ -1,5 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
+import { isVisible } from '../lib/visible';
 import type { CollectionEntry } from 'astro:content';
 import { itemUrl } from '../lib/itemUrl';
 
@@ -19,7 +20,7 @@ if (items && items.length > 0) {
   news = all
     .filter(
       (i) =>
-        i.data.status === 'active' &&
+        isVisible(i) &&
         i.data.category === 'news' &&
         Date.now() - i.data.date.getTime() <= SEVEN_DAYS
     )

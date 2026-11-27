@@ -3,13 +3,14 @@ import Base from '../layouts/Base.astro';
 import Header from '../components/Header.astro';
 import Card from '../components/Card.astro';
 import { getCollection } from 'astro:content';
+import { isVisible } from '../lib/visible';
 
 // 静态站点下服务端无法按 ?q= 过滤（构建期才执行），
 // 因此这里渲染全部 active 卡片（每张带 data-search），
 // 由客户端脚本读 URL 参数 / 输入框实时过滤。
 const all = await getCollection('items');
 const active = all
-  .filter((i) => i.data.status === 'active')
+  .filter((i) => isVisible(i))
   .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
 ---
 

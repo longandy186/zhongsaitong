@@ -15,3 +15,9 @@ scraper/.env
 
 # Cloudflare 本地构建缓存
 .wrangler/
+
+# wrangler 本地缓存
+.wrangler/
+
+# 误生成的图片目录
+generated-images/

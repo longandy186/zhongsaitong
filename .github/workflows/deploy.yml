@@ -3,12 +3,12 @@ name: Deploy to Cloudflare Pages
 on:
   push:
     branches: [main]
-  # ⚠️ 关键：Auto Scrape / Notify Pending Review 是用 workflow 默认的 GITHUB_TOKEN 推送的，
+  # ⚠️ 关键：Auto Scrape 是用 workflow 默认的 GITHUB_TOKEN 推送的，
   # GitHub 规定「GITHUB_TOKEN 推送不会触发其他 workflow」（防递归），
   # 所以只监听 push 的话，每天自动抓来的内容会进仓库但永远不会部署。
-  # 这里显式挂在这两个任务跑完之后再部署一次。
+  # 这里显式挂在抓取任务跑完之后再部署一次。
   workflow_run:
-    workflows: ["Auto Scrape", "Notify Pending Review"]
+    workflows: ["Auto Scrape"]
     types: [completed]
   workflow_dispatch:
 

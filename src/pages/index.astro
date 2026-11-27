@@ -10,11 +10,12 @@ import Card from '../components/Card.astro';
 import FeaturedArticle from '../components/FeaturedArticle.astro';
 import CurrencyConverter from '../components/CurrencyConverter.astro';
 import { getCollection } from 'astro:content';
+import { isVisible } from '../lib/visible';
 import type { CollectionEntry } from 'astro:content';
 import { EMERGENCY_TELS } from '../data/links';
 
 const all = await getCollection('items');
-const active = all.filter((i) => i.data.status === 'active');
+const active = all.filter((i) => isVisible(i));
 
 const dedup = new Map<string, CollectionEntry<'items'>>();
 for (const i of active) {

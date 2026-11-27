@@ -20,10 +20,15 @@ const STATE_FILE = path.join(__dirname, 'state.json');
 const DEDUP_WINDOW_DAYS = 14;
 const DAY_MS = 86400000;
 
-// AI 相关度门槛（0-10）。低于此分的条目不进审核队列（写盘但标 status: expired）。
-// 打分口径见 translate.js 的 RELEVANCE_RUBRIC。想临时放宽：
-//   RELEVANCE_MIN=5 node run.js     想全部放行：RELEVANCE_MIN=0 node run.js
-const RELEVANCE_MIN = Number(process.env.RELEVANCE_MIN ?? 7);
+// AI 相关度门槛（0-10）。低于此分的条目直接标 status: expired，不上站点。
+// 2026-11-28 起草稿/人工审核线已取消，"抓取即发布"，这条门槛是唯一的质量闸门。
+// 打分口径见 translate.js 的 RELEVANCE_RUBRIC。想临时改：
+//   RELEVANCE_MIN=0 node run.js   全部放行
+const RELEVANCE_MIN = Number(process.env.RELEVANCE_MIN ?? 5);
+
+// 过期天数：写出 expireAt，到点由站点在构建时自动下线（列表 + 详情页都不再生成）。
+// 新闻短、交易类中等、指南长期保留。
+const TTL_DAYS = { news: 7, guide: 365, rentals: 30, secondhand: 30, jobs: 30, supply: 30 };
 
 // 加载本地 .env（GitHub Actions 中由 secrets 注入；已显式设置的环境变量优先级更高）
 try {
@@ -393,10 +398,12 @@ function buildMd(entry) {
     `kind: ${kind}`,
     `date: ${dateStr}`,
     `scrapedAt: ${new Date().toISOString()}`,
-    `status: ${autoPublish ? 'active' : statusOverride ?? 'pending'}`,
+    `status: ${statusOverride ?? 'active'}`,
   ];
-  if (autoPublish) {
-    const exp = new Date(d.getTime() + 30 * 86400000);
+  {
+    // 抓取即发布：一律 active + expireAt，到点自动下线（草稿线已取消）
+    const ttl = TTL_DAYS[category] ?? 7;
+    const exp = new Date(d.getTime() + ttl * 86400000);
     const expStr = `${exp.getFullYear()}-${String(exp.getMonth() + 1).padStart(2, '0')}-${String(
       exp.getDate()
     ).padStart(2, '0')}`;
@@ -558,12 +565,12 @@ async function main() {
           continue;
         }
 
-        // 相关度门槛：AI 打分低于阈值的不进审核队列。
+        // 相关度门槛：AI 打分低于阈值的直接归档，不上站点。
         // 注意必须「写文件 + status: expired」而不是直接丢弃——去重集 loadExisting()
         // 是扫 items 目录里的 .md 得出的，不落盘的话同一篇会在每轮抓取被重复翻译，
         // 直到它滚出 RSS 窗口为止。expired 不参与 notify（只读 pending）、不上站点列表。
         const rel = entry.relevance;
-        const lowRelevance = !entry.autoPublish && Number.isFinite(rel) && rel < RELEVANCE_MIN;
+        const lowRelevance = Number.isFinite(rel) && rel < RELEVANCE_MIN;
         if (lowRelevance) {
           entry.statusOverride = 'expired';
           entry.note = [entry.note, `相关度 ${rel}/10 低于门槛 ${RELEVANCE_MIN}，自动归档`]
