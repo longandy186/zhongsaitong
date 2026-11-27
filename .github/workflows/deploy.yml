@@ -3,13 +3,31 @@ name: Deploy to Cloudflare Pages
 on:
   push:
     branches: [main]
+  # ⚠️ 关键：Auto Scrape / Notify Pending Review 是用 workflow 默认的 GITHUB_TOKEN 推送的，
+  # GitHub 规定「GITHUB_TOKEN 推送不会触发其他 workflow」（防递归），
+  # 所以只监听 push 的话，每天自动抓来的内容会进仓库但永远不会部署。
+  # 这里显式挂在这两个任务跑完之后再部署一次。
+  workflow_run:
+    workflows: ["Auto Scrape", "Notify Pending Review"]
+    types: [completed]
   workflow_dispatch:
+
+# 避免 push 与 workflow_run 同时触发时两个部署互相打断
+concurrency:
+  group: pages-deploy-zhongsaitong
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    # 上游抓取失败时不部署，避免把半成品推上线
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # workflow_run 的默认 ref 不可靠，显式取 main，保证部署的是最新内容
+          ref: main
+          fetch-depth: 1
 
       - uses: actions/setup-node@v4
         with:
